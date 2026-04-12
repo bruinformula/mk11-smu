@@ -1,0 +1,11 @@
+../Core/Src/main.c:93:6:HAL_UART_RxCpltCallback	1
+../Core/Src/main.c:98:6:HAL_UART_ErrorCallback	2
+../Core/Src/main.c:105:6:HAL_UART_AbortCpltCallback	2
+../Core/Src/main.c:116:5:main	13
+../Core/Src/main.c:238:6:SystemClock_Config	4
+../Core/Src/main.c:286:13:MX_FDCAN1_Init	2
+../Core/Src/main.c:327:13:MX_ICACHE_Init	2
+../Core/Src/main.c:353:13:MX_SPI1_Init	2
+../Core/Src/main.c:391:13:MX_UART4_Init	5
+../Core/Src/main.c:436:13:MX_GPIO_Init	1
+../Core/Src/main.c:486:6:Error_Handler	1

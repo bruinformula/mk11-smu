@@ -1,0 +1,3 @@
+../Core/Src/pps.c:12:6:PPS_ForcePinConfig	40	static
+../Core/Src/pps.c:29:19:PPS_Init	8	static
+../Core/Src/pps.c:44:6:PPS_Process	24	static

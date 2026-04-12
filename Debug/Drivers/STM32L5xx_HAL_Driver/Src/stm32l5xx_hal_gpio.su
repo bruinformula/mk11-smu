@@ -1,0 +1,9 @@
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:159:6:HAL_GPIO_Init	32	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:277:6:HAL_GPIO_DeInit	32	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:355:15:HAL_GPIO_ReadPin	24	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:385:6:HAL_GPIO_WritePin	16	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:405:6:HAL_GPIO_TogglePin	24	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:429:19:HAL_GPIO_LockPin	24	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:460:6:HAL_GPIO_EXTI_IRQHandler	16	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:478:13:HAL_GPIO_EXTI_Rising_Callback	16	static
+../Drivers/STM32L5xx_HAL_Driver/Src/stm32l5xx_hal_gpio.c:492:13:HAL_GPIO_EXTI_Falling_Callback	16	static
