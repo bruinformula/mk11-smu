@@ -51,6 +51,30 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
+/* USEFUL LIVE EXPRESSIONS TO PROBE:
+ *
+ * fdcan_tx_count
+ *
+ * imu_comm_ok
+ * imu_init_ok
+ * imu_ax_corr_g
+ * imu_ay_corr_g
+ * imu_az_corr_g
+ * imu1_pitch_deg
+ * imu1_roll_deg
+ *
+ * gps_data.fix_valid
+ * gps_data.satellites
+ * gps1_latitude_deg
+ * gps1_longitude_deg
+ * gps1_altitude_m
+ * gps1_velocity_mps
+ * gps1_heading_deg
+ *
+ * gps1_pps_count
+ * gps1_last_pps_ms
+ */
+
 volatile uint8_t imu_whoami = 0U;
 volatile uint8_t imu_comm_ok = 0U;
 volatile uint8_t imu_init_ok = 0U;
