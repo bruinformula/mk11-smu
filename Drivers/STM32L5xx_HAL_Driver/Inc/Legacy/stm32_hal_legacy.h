@@ -1,21 +1,21 @@
 /**
- ******************************************************************************
- * @file    stm32_hal_legacy.h
- * @author  MCD Application Team
- * @brief   This file contains aliases definition for the STM32Cube HAL constants
- *          macros and functions maintained for legacy purpose.
- ******************************************************************************
- * @attention
- *
- * Copyright (c) 2021 STMicroelectronics.
- * All rights reserved.
- *
- * This software is licensed under terms that can be found in the LICENSE file
- * in the root directory of this software component.
- * If no LICENSE file comes with this software, it is provided AS-IS.
- *
- ******************************************************************************
- */
+  ******************************************************************************
+  * @file    stm32_hal_legacy.h
+  * @author  MCD Application Team
+  * @brief   This file contains aliases definition for the STM32Cube HAL constants
+  *          macros and functions maintained for legacy purpose.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2021 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef STM32_HAL_LEGACY
@@ -30,8 +30,8 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 
 /** @defgroup HAL_AES_Aliased_Defines HAL CRYP Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define AES_FLAG_RDERR                  CRYP_FLAG_RDERR
 #define AES_FLAG_WRERR                  CRYP_FLAG_WRERR
 #define AES_CLEARFLAG_CCF               CRYP_CLEARFLAG_CCF
@@ -44,12 +44,12 @@ extern "C" {
 #define CRYP_DATATYPE_1B                CRYP_BIT_SWAP
 #endif /* STM32H7 || STM32MP1 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_ADC_Aliased_Defines HAL ADC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define ADC_RESOLUTION12b               ADC_RESOLUTION_12B
 #define ADC_RESOLUTION10b               ADC_RESOLUTION_10B
 #define ADC_RESOLUTION8b                ADC_RESOLUTION_8B
@@ -113,22 +113,22 @@ extern "C" {
 #define ADC_CHANNEL_VCORE               ADC_CHANNEL_VDDCORE
 #endif /* STM32H5 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_CEC_Aliased_Defines HAL CEC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_CEC_GET_IT __HAL_CEC_GET_FLAG
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_COMP_Aliased_Defines HAL COMP Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define COMP_WINDOWMODE_DISABLED       COMP_WINDOWMODE_DISABLE
 #define COMP_WINDOWMODE_ENABLED        COMP_WINDOWMODE_ENABLE
 #define COMP_EXTI_LINE_COMP1_EVENT     COMP_EXTI_LINE_COMP1
@@ -220,12 +220,12 @@ extern "C" {
 #endif
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_CORTEX_Aliased_Defines HAL CORTEX Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_CORTEX_SYSTICKCLK_CONFIG HAL_SYSTICK_CLKSourceConfig
 #if defined(STM32U5)
 #define  MPU_DEVICE_nGnRnE          MPU_DEVICE_NGNRNE
@@ -233,12 +233,12 @@ extern "C" {
 #define  MPU_DEVICE_nGRE            MPU_DEVICE_NGRE
 #endif /* STM32U5 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup CRC_Aliases CRC API aliases
- * @{
- */
+  * @{
+  */
 #if defined(STM32H5) || defined(STM32C0)
 #else
 #define HAL_CRC_Input_Data_Reverse   HAL_CRCEx_Input_Data_Reverse    /*!< Aliased to HAL_CRCEx_Input_Data_Reverse for 
@@ -247,23 +247,23 @@ extern "C" {
                                                                           inter STM32 series compatibility */
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_CRC_Aliased_Defines HAL CRC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define CRC_OUTPUTDATA_INVERSION_DISABLED    CRC_OUTPUTDATA_INVERSION_DISABLE
 #define CRC_OUTPUTDATA_INVERSION_ENABLED     CRC_OUTPUTDATA_INVERSION_ENABLE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DAC_Aliased_Defines HAL DAC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define DAC1_CHANNEL_1                                  DAC_CHANNEL_1
 #define DAC1_CHANNEL_2                                  DAC_CHANNEL_2
@@ -299,12 +299,12 @@ extern "C" {
 #endif
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DMA_Aliased_Defines HAL DMA Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_REMAPDMA_ADC_DMA_CH2                DMA_REMAP_ADC_DMA_CH2
 #define HAL_REMAPDMA_USART1_TX_DMA_CH4          DMA_REMAP_USART1_TX_DMA_CH4
 #define HAL_REMAPDMA_USART1_RX_DMA_CH5          DMA_REMAP_USART1_RX_DMA_CH5
@@ -361,7 +361,10 @@ extern "C" {
 #if defined(STM32L4R5xx) || defined(STM32L4R9xx) || defined(STM32L4R9xx) || defined(STM32L4S5xx) || \
     defined(STM32L4S7xx) || defined(STM32L4S9xx)
 #define DMA_REQUEST_DCMI_PSSI                    DMA_REQUEST_DCMI
-#endif
+#elif defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+#define DMA_REQUEST_PSSI                    DMA_REQUEST_DCMI_PSSI
+#define LL_DMAMUX_REQ_PSSI                  LL_DMAMUX_REQ_DCMI_PSSI
+#endif /* STM32L4R5xx || STM32L4R9xx || STM32L4R9xx || STM32L4S5xx || STM32L4S7xx || STM32L4S9xx */
 
 #endif /* STM32L4 */
 
@@ -441,12 +444,12 @@ extern "C" {
 #define GPDMA1_REQUEST_DCMI                        GPDMA1_REQUEST_DCMI_PSSI
 #endif /* STM32U5 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_FLASH_Aliased_Defines HAL FLASH Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define TYPEPROGRAM_BYTE              FLASH_TYPEPROGRAM_BYTE
 #define TYPEPROGRAM_HALFWORD          FLASH_TYPEPROGRAM_HALFWORD
@@ -472,7 +475,9 @@ extern "C" {
 #define TYPEPROGRAMDATA_FASTBYTE      FLASH_TYPEPROGRAMDATA_FASTBYTE
 #define TYPEPROGRAMDATA_FASTHALFWORD  FLASH_TYPEPROGRAMDATA_FASTHALFWORD
 #define TYPEPROGRAMDATA_FASTWORD      FLASH_TYPEPROGRAMDATA_FASTWORD
+#if !defined(STM32F2) && !defined(STM32F4) && !defined(STM32F7) && !defined(STM32H7) && !defined(STM32H5) 
 #define PAGESIZE                      FLASH_PAGE_SIZE
+#endif /* STM32F2 && STM32F4 && STM32F7 &&  STM32H7 && STM32H5 */
 #define TYPEPROGRAM_FASTBYTE          FLASH_TYPEPROGRAM_BYTE
 #define TYPEPROGRAM_FASTHALFWORD      FLASH_TYPEPROGRAM_HALFWORD
 #define TYPEPROGRAM_FASTWORD          FLASH_TYPEPROGRAM_WORD
@@ -536,6 +541,10 @@ extern "C" {
 #define FLASH_FLAG_WDW                FLASH_FLAG_WBNE
 #define OB_WRP_SECTOR_All             OB_WRP_SECTOR_ALL
 #endif /* STM32H7 */
+#if defined(STM32H7RS)
+#define FLASH_OPTKEY1                 FLASH_OPT_KEY1
+#define FLASH_OPTKEY2                 FLASH_OPT_KEY2
+#endif /* STM32H7RS */
 #if defined(STM32U5)
 #define OB_USER_nRST_STOP             OB_USER_NRST_STOP
 #define OB_USER_nRST_STDBY            OB_USER_NRST_STDBY
@@ -548,14 +557,27 @@ extern "C" {
 #define OB_SRAM134_RST_ERASE          OB_SRAM_RST_ERASE
 #define OB_SRAM134_RST_NOT_ERASE      OB_SRAM_RST_NOT_ERASE
 #endif /* STM32U5 */
+#if defined(STM32U0)
+#define OB_USER_nRST_STOP             OB_USER_NRST_STOP
+#define OB_USER_nRST_STDBY            OB_USER_NRST_STDBY
+#define OB_USER_nRST_SHDW             OB_USER_NRST_SHDW
+#define OB_USER_nBOOT_SEL             OB_USER_NBOOT_SEL
+#define OB_USER_nBOOT0                OB_USER_NBOOT0
+#define OB_USER_nBOOT1                OB_USER_NBOOT1
+#define OB_nBOOT0_RESET               OB_NBOOT0_RESET
+#define OB_nBOOT0_SET                 OB_NBOOT0_SET
+#endif /* STM32U0 */
+#if defined(STM32H5)
+#define FLASH_ECC_AREA_EDATA          FLASH_ECC_AREA_EDATA_BANK1
+#endif /* STM32H5 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_JPEG_Aliased_Macros HAL JPEG Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #if defined(STM32H7)
 #define __HAL_RCC_JPEG_CLK_ENABLE               __HAL_RCC_JPGDECEN_CLK_ENABLE
@@ -567,12 +589,12 @@ extern "C" {
 #endif /* STM32H7 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SYSCFG_Aliased_Defines HAL SYSCFG Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define HAL_SYSCFG_FASTMODEPLUS_I2C_PA9    I2C_FASTMODEPLUS_PA9
 #define HAL_SYSCFG_FASTMODEPLUS_I2C_PA10   I2C_FASTMODEPLUS_PA10
@@ -590,6 +612,15 @@ extern "C" {
 #define HAL_SYSCFG_EnableIOAnalogSwitchVDD        HAL_SYSCFG_EnableIOSwitchVDD
 #define HAL_SYSCFG_DisableIOAnalogSwitchVDD       HAL_SYSCFG_DisableIOSwitchVDD
 #endif /* STM32G4 */
+
+#if defined(STM32U5)
+
+#define HAL_SYSCFG_EnableIOAnalogSwitchBooster                 HAL_SYSCFG_EnableIOAnalogBooster
+#define HAL_SYSCFG_DisableIOAnalogSwitchBooster                HAL_SYSCFG_DisableIOAnalogBooster
+#define HAL_SYSCFG_EnableIOAnalogSwitchVoltageSelection        HAL_SYSCFG_EnableIOAnalogVoltageSelection
+#define HAL_SYSCFG_DisableIOAnalogSwitchVoltageSelection       HAL_SYSCFG_DisableIOAnalogVoltageSelection
+
+#endif /* STM32U5 */
 
 #if defined(STM32H5)
 #define SYSCFG_IT_FPU_IOC         SBS_IT_FPU_IOC
@@ -690,13 +721,15 @@ extern "C" {
 
 #endif /* STM32H5 */
 
+
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup LL_FMC_Aliased_Defines LL FMC Aliased Defines maintained for compatibility purpose
- * @{
- */
+  * @{
+  */
 #if defined(STM32L4) || defined(STM32F7) || defined(STM32H7) || defined(STM32G4)
 #define FMC_NAND_PCC_WAIT_FEATURE_DISABLE       FMC_NAND_WAIT_FEATURE_DISABLE
 #define FMC_NAND_PCC_WAIT_FEATURE_ENABLE        FMC_NAND_WAIT_FEATURE_ENABLE
@@ -709,22 +742,22 @@ extern "C" {
 #define FMC_NAND_MEM_BUS_WIDTH_16               FMC_NAND_PCC_MEM_BUS_WIDTH_16
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup LL_FSMC_Aliased_Defines LL FSMC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define FSMC_NORSRAM_TYPEDEF                      FSMC_NORSRAM_TypeDef
 #define FSMC_NORSRAM_EXTENDED_TYPEDEF             FSMC_NORSRAM_EXTENDED_TypeDef
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_GPIO_Aliased_Macros HAL GPIO Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define GET_GPIO_SOURCE                           GPIO_GET_INDEX
 #define GET_GPIO_INDEX                            GPIO_GET_INDEX
 
@@ -794,13 +827,28 @@ extern "C" {
 #define GPIO_AF0_S2DSTOP                          GPIO_AF0_SRDSTOP
 #define GPIO_AF11_LPGPIO                          GPIO_AF11_LPGPIO1
 #endif /* STM32U5 */
+
+#if defined(STM32WBA)
+#define GPIO_AF11_RF_ANTSW0    GPIO_AF11_RF
+#define GPIO_AF11_RF_ANTSW1    GPIO_AF11_RF
+#define GPIO_AF11_RF_ANTSW2    GPIO_AF11_RF
+#define GPIO_AF11_RF_IO1       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO2       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO3       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO4       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO5       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO6       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO7       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO8       GPIO_AF11_RF
+#define GPIO_AF11_RF_IO9       GPIO_AF11_RF
+#endif /* STM32WBA */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_GTZC_Aliased_Defines HAL GTZC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined(STM32U5)
 #define GTZC_PERIPH_DCMI                      GTZC_PERIPH_DCMI_PSSI
 #define GTZC_PERIPH_LTDC                      GTZC_PERIPH_LTDCUSB
@@ -823,12 +871,12 @@ extern "C" {
 #define GTZC_MCPBB_LOCK_ON                    GTZC_MPCBB_LOCK_ON
 #endif /* STM32H5 || STM32U5 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_HRTIM_Aliased_Macros HAL HRTIM Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HRTIM_TIMDELAYEDPROTECTION_DISABLED           HRTIM_TIMER_A_B_C_DELAYEDPROTECTION_DISABLED
 #define HRTIM_TIMDELAYEDPROTECTION_DELAYEDOUT1_EEV68  HRTIM_TIMER_A_B_C_DELAYEDPROTECTION_DELAYEDOUT1_EEV6
 #define HRTIM_TIMDELAYEDPROTECTION_DELAYEDOUT2_EEV68  HRTIM_TIMER_A_B_C_DELAYEDPROTECTION_DELAYEDOUT2_EEV6
@@ -847,6 +895,10 @@ extern "C" {
 #define __HAL_HRTIM_GetClockPrescaler __HAL_HRTIM_GETCLOCKPRESCALER
 #define __HAL_HRTIM_SetCompare        __HAL_HRTIM_SETCOMPARE
 #define __HAL_HRTIM_GetCompare        __HAL_HRTIM_GETCOMPARE
+
+#if defined(STM32F3) || defined(STM32G4) || defined(STM32H7)
+#define HRTIMInterruptResquests  HRTIMInterruptRequests
+#endif /* STM32F3 || STM32G4 || STM32H7 */
 
 #if defined(STM32G4)
 #define HAL_HRTIM_ExternalEventCounterConfig    HAL_HRTIM_ExtEventCounterConfig
@@ -985,15 +1037,15 @@ extern "C" {
 #define HRTIM_CALIBRATIONRATE_910              (HRTIM_DLLCR_CALRTE_0)
 #define HRTIM_CALIBRATIONRATE_114              (HRTIM_DLLCR_CALRTE_1)
 #define HRTIM_CALIBRATIONRATE_14               (HRTIM_DLLCR_CALRTE_1 | HRTIM_DLLCR_CALRTE_0)
-
 #endif /* STM32F3 */
+
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_I2C_Aliased_Defines HAL I2C Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define I2C_DUALADDRESS_DISABLED                I2C_DUALADDRESS_DISABLE
 #define I2C_DUALADDRESS_ENABLED                 I2C_DUALADDRESS_ENABLE
 #define I2C_GENERALCALL_DISABLED                I2C_GENERALCALL_DISABLE
@@ -1012,33 +1064,33 @@ extern "C" {
 #define HAL_I2C_STATE_SLAVE_BUSY_RX             HAL_I2C_STATE_BUSY_RX
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_IRDA_Aliased_Defines HAL IRDA Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define IRDA_ONE_BIT_SAMPLE_DISABLED            IRDA_ONE_BIT_SAMPLE_DISABLE
 #define IRDA_ONE_BIT_SAMPLE_ENABLED             IRDA_ONE_BIT_SAMPLE_ENABLE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_IWDG_Aliased_Defines HAL IWDG Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define KR_KEY_RELOAD                   IWDG_KEY_RELOAD
 #define KR_KEY_ENABLE                   IWDG_KEY_ENABLE
 #define KR_KEY_EWA                      IWDG_KEY_WRITE_ACCESS_ENABLE
 #define KR_KEY_DWA                      IWDG_KEY_WRITE_ACCESS_DISABLE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_LPTIM_Aliased_Defines HAL LPTIM Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define LPTIM_CLOCKSAMPLETIME_DIRECTTRANSISTION LPTIM_CLOCKSAMPLETIME_DIRECTTRANSITION
 #define LPTIM_CLOCKSAMPLETIME_2TRANSISTIONS     LPTIM_CLOCKSAMPLETIME_2TRANSITIONS
@@ -1060,13 +1112,14 @@ extern "C" {
 #define LPTIM_TRIGSAMPLETIME_4TRANSITION        LPTIM_TRIGSAMPLETIME_4TRANSITIONS
 #define LPTIM_TRIGSAMPLETIME_8TRANSITION        LPTIM_TRIGSAMPLETIME_8TRANSITIONS
 
+
 /** @defgroup HAL_LPTIM_Aliased_Defines HAL LPTIM Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_LPTIM_ReadCompare      HAL_LPTIM_ReadCapturedValue
 /**
- * @}
- */
+  * @}
+  */
 
 #if defined(STM32U5)
 #define LPTIM_ISR_CC1        LPTIM_ISR_CC1IF
@@ -1074,12 +1127,12 @@ extern "C" {
 #define LPTIM_CHANNEL_ALL    0x00000000U
 #endif /* STM32U5 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_NAND_Aliased_Defines HAL NAND Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_NAND_Read_Page              HAL_NAND_Read_Page_8b
 #define HAL_NAND_Write_Page             HAL_NAND_Write_Page_8b
 #define HAL_NAND_Read_SpareArea         HAL_NAND_Read_SpareArea_8b
@@ -1093,12 +1146,12 @@ extern "C" {
 #define __ADDR_3rd_CYCLE                ADDR_3RD_CYCLE
 #define __ADDR_4th_CYCLE                ADDR_4TH_CYCLE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_NOR_Aliased_Defines HAL NOR Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define NOR_StatusTypedef              HAL_NOR_StatusTypeDef
 #define NOR_SUCCESS                    HAL_NOR_STATUS_SUCCESS
 #define NOR_ONGOING                    HAL_NOR_STATUS_ONGOING
@@ -1108,12 +1161,12 @@ extern "C" {
 #define __NOR_WRITE                    NOR_WRITE
 #define __NOR_ADDR_SHIFT               NOR_ADDR_SHIFT
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_OPAMP_Aliased_Defines HAL OPAMP Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define OPAMP_NONINVERTINGINPUT_VP0           OPAMP_NONINVERTINGINPUT_IO0
 #define OPAMP_NONINVERTINGINPUT_VP1           OPAMP_NONINVERTINGINPUT_IO1
@@ -1152,12 +1205,12 @@ extern "C" {
 #endif
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_I2S_Aliased_Defines HAL I2S Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define I2S_STANDARD_PHILLIPS      I2S_STANDARD_PHILIPS
 
 #if defined(STM32H7)
@@ -1172,12 +1225,12 @@ extern "C" {
 #define I2S_CLOCK_SYSCLK           I2S_CLOCK_PLL
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_PCCARD_Aliased_Defines HAL PCCARD Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 /* Compact Flash-ATA registers description */
 #define CF_DATA                       ATA_DATA
@@ -1202,12 +1255,12 @@ extern "C" {
 #define PCCARD_ERROR                  HAL_PCCARD_STATUS_ERROR
 #define PCCARD_TIMEOUT                HAL_PCCARD_STATUS_TIMEOUT
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_RTC_Aliased_Defines HAL RTC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define FORMAT_BIN                  RTC_FORMAT_BIN
 #define FORMAT_BCD                  RTC_FORMAT_BCD
@@ -1236,10 +1289,10 @@ extern "C" {
 #define RTC_TAMPERPIN_PA0  RTC_TAMPERPIN_POS1
 #define RTC_TAMPERPIN_PI8  RTC_TAMPERPIN_POS1
 
-#if defined(STM32H5)
+#if defined(STM32H5) || defined(STM32H7RS) || defined(STM32N6)
 #define TAMP_SECRETDEVICE_ERASE_NONE        TAMP_DEVICESECRETS_ERASE_NONE
 #define TAMP_SECRETDEVICE_ERASE_BKP_SRAM    TAMP_DEVICESECRETS_ERASE_BKPSRAM
-#endif /* STM32H5 */
+#endif /* STM32H5 || STM32H7RS || STM32N6 */
 
 #if defined(STM32WBA)
 #define TAMP_SECRETDEVICE_ERASE_NONE            TAMP_DEVICESECRETS_ERASE_NONE
@@ -1251,35 +1304,36 @@ extern "C" {
 #define TAMP_SECRETDEVICE_ERASE_ALL             TAMP_DEVICESECRETS_ERASE_ALL
 #endif /* STM32WBA */
 
-#if defined(STM32H5) || defined(STM32WBA)
+#if defined(STM32H5) || defined(STM32WBA) || defined(STM32H7RS) || defined(STM32N6)
 #define TAMP_SECRETDEVICE_ERASE_DISABLE     TAMP_DEVICESECRETS_ERASE_NONE
 #define TAMP_SECRETDEVICE_ERASE_ENABLE      TAMP_SECRETDEVICE_ERASE_ALL
-#endif /* STM32H5 || STM32WBA */
+#endif /* STM32H5 || STM32WBA || STM32H7RS ||  STM32N6 */
 
-#if defined(STM32F7)
+#if defined(STM32F7) || defined(STM32WB)
 #define RTC_TAMPCR_TAMPXE          RTC_TAMPER_ENABLE_BITS_MASK
 #define RTC_TAMPCR_TAMPXIE         RTC_TAMPER_IT_ENABLE_BITS_MASK
-#endif /* STM32F7 */
+#endif /* STM32F7 || STM32WB */
 
 #if defined(STM32H7)
 #define RTC_TAMPCR_TAMPXE          RTC_TAMPER_X
 #define RTC_TAMPCR_TAMPXIE         RTC_TAMPER_X_INTERRUPT
 #endif /* STM32H7 */
 
-#if defined(STM32F7) || defined(STM32H7) || defined(STM32L0)
+#if defined(STM32F7) || defined(STM32H7) || defined(STM32L0) || defined(STM32WB)
 #define RTC_TAMPER1_INTERRUPT      RTC_IT_TAMP1
 #define RTC_TAMPER2_INTERRUPT      RTC_IT_TAMP2
 #define RTC_TAMPER3_INTERRUPT      RTC_IT_TAMP3
 #define RTC_ALL_TAMPER_INTERRUPT   RTC_IT_TAMP
-#endif /* STM32F7 || STM32H7 || STM32L0 */
+#endif /* STM32F7 || STM32H7 || STM32L0 || STM32WB */
 
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_SMARTCARD_Aliased_Defines HAL SMARTCARD Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define SMARTCARD_NACK_ENABLED                  SMARTCARD_NACK_ENABLE
 #define SMARTCARD_NACK_DISABLED                 SMARTCARD_NACK_DISABLE
 
@@ -1294,12 +1348,13 @@ extern "C" {
 #define SMARTCARD_LASTBIT_DISABLED              SMARTCARD_LASTBIT_DISABLE
 #define SMARTCARD_LASTBIT_ENABLED               SMARTCARD_LASTBIT_ENABLE
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_SMBUS_Aliased_Defines HAL SMBUS Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define SMBUS_DUALADDRESS_DISABLED      SMBUS_DUALADDRESS_DISABLE
 #define SMBUS_DUALADDRESS_ENABLED       SMBUS_DUALADDRESS_ENABLE
 #define SMBUS_GENERALCALL_DISABLED      SMBUS_GENERALCALL_DISABLE
@@ -1312,12 +1367,12 @@ extern "C" {
 #define SMBUS_PEC_ENABLED               SMBUS_PEC_ENABLE
 #define HAL_SMBUS_STATE_SLAVE_LISTEN    HAL_SMBUS_STATE_LISTEN
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SPI_Aliased_Defines HAL SPI Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define SPI_TIMODE_DISABLED             SPI_TIMODE_DISABLE
 #define SPI_TIMODE_ENABLED              SPI_TIMODE_ENABLE
 
@@ -1343,12 +1398,12 @@ extern "C" {
 #endif /* STM32H7 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_TIM_Aliased_Defines HAL TIM Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define CCER_CCxE_MASK                   TIM_CCER_CCxE_MASK
 #define CCER_CCxNE_MASK                  TIM_CCER_CCxNE_MASK
 
@@ -1436,26 +1491,26 @@ extern "C" {
 #define TIM_TIM3_TI1_COMP1COMP2_OUT   TIM_TIM3_TI1_COMP1_COMP2
 #endif
 
-#if defined(STM32U5)
+#if defined(STM32U5) || defined(STM32MP2)
 #define OCREF_CLEAR_SELECT_Pos       OCREF_CLEAR_SELECT_POS
 #define OCREF_CLEAR_SELECT_Msk       OCREF_CLEAR_SELECT_MSK
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_TSC_Aliased_Defines HAL TSC Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define TSC_SYNC_POL_FALL        TSC_SYNC_POLARITY_FALLING
 #define TSC_SYNC_POL_RISE_HIGH   TSC_SYNC_POLARITY_RISING
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_UART_Aliased_Defines HAL UART Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define UART_ONEBIT_SAMPLING_DISABLED   UART_ONE_BIT_SAMPLE_DISABLE
 #define UART_ONEBIT_SAMPLING_ENABLED    UART_ONE_BIT_SAMPLE_ENABLE
 #define UART_ONE_BIT_SAMPLE_DISABLED    UART_ONE_BIT_SAMPLE_DISABLE
@@ -1480,12 +1535,13 @@ extern "C" {
 #define UART_WAKEUPMETHODE_ADDRESSMARK  UART_WAKEUPMETHOD_ADDRESSMARK
 
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_USART_Aliased_Defines HAL USART Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define USART_CLOCK_DISABLED            USART_CLOCK_DISABLE
 #define USART_CLOCK_ENABLED             USART_CLOCK_ENABLE
@@ -1493,21 +1549,21 @@ extern "C" {
 #define USARTNACK_ENABLED               USART_NACK_ENABLE
 #define USARTNACK_DISABLED              USART_NACK_DISABLE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_WWDG_Aliased_Defines HAL WWDG Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define CFR_BASE                    WWDG_CFR_BASE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_CAN_Aliased_Defines HAL CAN Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define CAN_FilterFIFO0             CAN_FILTER_FIFO0
 #define CAN_FilterFIFO1             CAN_FILTER_FIFO1
 #define CAN_IT_RQCP0                CAN_IT_TME
@@ -1520,12 +1576,12 @@ extern "C" {
 #define CAN_TXSTATUS_PENDING        ((uint8_t)0x02U)
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_ETH_Aliased_Defines HAL ETH Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define VLAN_TAG                ETH_VLAN_TAG
 #define MIN_ETH_PAYLOAD         ETH_MIN_ETH_PAYLOAD
@@ -1592,12 +1648,12 @@ extern "C" {
 #define ETH_TxPacketConfig        ETH_TxPacketConfigTypeDef   /* Transmit Packet Configuration structure definition */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DCMI_Aliased_Defines HAL DCMI Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_DCMI_ERROR_OVF      HAL_DCMI_ERROR_OVR
 #define DCMI_IT_OVF             DCMI_IT_OVR
 #define DCMI_FLAG_OVFRI         DCMI_FLAG_OVRRI
@@ -1608,8 +1664,8 @@ extern "C" {
 #define HAL_DCMI_DisableCROP    HAL_DCMI_DisableCrop
 
 /**
- * @}
- */
+  * @}
+  */
 
 #if defined(STM32L4) || defined(STM32F7) || defined(STM32F427xx) || defined(STM32F437xx) \
   || defined(STM32F429xx) || defined(STM32F439xx) || defined(STM32F469xx) || defined(STM32F479xx) \
@@ -1654,26 +1710,26 @@ extern "C" {
 #endif  /* STM32L4 ||  STM32F7 ||  STM32F4 ||  STM32H7 || STM32U5 */
 
 /** @defgroup HAL_PPP_Aliased_Defines HAL PPP Aliased Defines maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /* Exported functions --------------------------------------------------------*/
 
 /** @defgroup HAL_CRYP_Aliased_Functions HAL CRYP Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_CRYP_ComputationCpltCallback     HAL_CRYPEx_ComputationCpltCallback
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DCACHE_Aliased_Functions HAL DCACHE Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #if defined(STM32U5)
 #define HAL_DCACHE_CleanInvalidateByAddr     HAL_DCACHE_CleanInvalidByAddr
@@ -1681,22 +1737,22 @@ extern "C" {
 #endif /* STM32U5 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 #if !defined(STM32F2)
 /** @defgroup HASH_alias HASH API alias
- * @{
- */
+  * @{
+  */
 #define HAL_HASHEx_IRQHandler   HAL_HASH_IRQHandler  /*!< Redirection for compatibility with legacy code */
 /**
- *
- * @}
- */
+  *
+  * @}
+  */
 #endif /* STM32F2 */
 /** @defgroup HAL_HASH_Aliased_Functions HAL HASH Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_HASH_STATETypeDef        HAL_HASH_StateTypeDef
 #define HAL_HASHPhaseTypeDef         HAL_HASH_PhaseTypeDef
 #define HAL_HMAC_MD5_Finish          HAL_HASH_MD5_Finish
@@ -1741,12 +1797,12 @@ extern "C" {
 
 #endif  /* STM32L4 || STM32L5 || STM32F2 || STM32F4 || STM32F7 || STM32H7 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_Aliased_Functions HAL Generic Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_EnableDBGSleepMode HAL_DBGMCU_EnableDBGSleepMode
 #define HAL_DisableDBGSleepMode HAL_DBGMCU_DisableDBGSleepMode
 #define HAL_EnableDBGStopMode HAL_DBGMCU_EnableDBGStopMode
@@ -1775,12 +1831,12 @@ extern "C" {
 #endif /* STM32H7A3xx || STM32H7B3xx || STM32H7B0xx || STM32H7A3xxQ || STM32H7B3xxQ  || STM32H7B0xxQ */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_FLASH_Aliased_Functions HAL FLASH Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define FLASH_HalfPageProgram      HAL_FLASHEx_HalfPageProgram
 #define FLASH_EnableRunPowerDown   HAL_FLASHEx_EnableRunPowerDown
 #define FLASH_DisableRunPowerDown  HAL_FLASHEx_DisableRunPowerDown
@@ -1790,18 +1846,18 @@ extern "C" {
 #define HAL_DATA_EEPROMEx_Program  HAL_FLASHEx_DATAEEPROM_Program
 
 /**
- * @}
+  * @}
  */
 
 /** @defgroup HAL_I2C_Aliased_Functions HAL I2C Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_I2CEx_AnalogFilter_Config         HAL_I2CEx_ConfigAnalogFilter
 #define HAL_I2CEx_DigitalFilter_Config        HAL_I2CEx_ConfigDigitalFilter
 #define HAL_FMPI2CEx_AnalogFilter_Config      HAL_FMPI2CEx_ConfigAnalogFilter
 #define HAL_FMPI2CEx_DigitalFilter_Config     HAL_FMPI2CEx_ConfigDigitalFilter
 
-#define HAL_I2CFastModePlusConfig(SYSCFG_I2CFastModePlus, cmd) ((cmd == ENABLE)? \
+#define HAL_I2CFastModePlusConfig(SYSCFG_I2CFastModePlus, cmd) (((cmd) == ENABLE)? \
                                                                 HAL_I2CEx_EnableFastModePlus(SYSCFG_I2CFastModePlus): \
                                                                 HAL_I2CEx_DisableFastModePlus(SYSCFG_I2CFastModePlus))
 
@@ -1833,12 +1889,12 @@ extern "C" {
 #define HAL_FMPI2C_Slave_Sequential_Receive_DMA   HAL_FMPI2C_Slave_Seq_Receive_DMA
 #endif /* STM32F4 */
 /**
- * @}
+  * @}
  */
 
 /** @defgroup HAL_PWR_Aliased HAL PWR Aliased maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #if defined(STM32G0)
 #define HAL_PWR_ConfigPVD                             HAL_PWREx_ConfigPVD
@@ -1977,44 +2033,44 @@ extern "C" {
 #endif
 
 /**
- * @}
+  * @}
  */
 
 /** @defgroup HAL_RTC_Aliased_Functions HAL RTC Aliased Functions maintained for legacy purpose
- * @{
- */
-#if defined(STM32H5) || defined(STM32WBA)
+  * @{
+  */
+#if defined(STM32H5) || defined(STM32WBA) || defined(STM32H7RS) || defined(STM32N6)
 #define HAL_RTCEx_SetBoothardwareKey            HAL_RTCEx_LockBootHardwareKey
 #define HAL_RTCEx_BKUPBlock_Enable              HAL_RTCEx_BKUPBlock
 #define HAL_RTCEx_BKUPBlock_Disable             HAL_RTCEx_BKUPUnblock
 #define HAL_RTCEx_Erase_SecretDev_Conf          HAL_RTCEx_ConfigEraseDeviceSecrets
-#endif /* STM32H5 || STM32WBA */
+#endif /* STM32H5 || STM32WBA || STM32H7RS || STM32N6 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SMBUS_Aliased_Functions HAL SMBUS Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_SMBUS_Slave_Listen_IT          HAL_SMBUS_EnableListen_IT
 #define HAL_SMBUS_SlaveAddrCallback        HAL_SMBUS_AddrCallback
 #define HAL_SMBUS_SlaveListenCpltCallback  HAL_SMBUS_ListenCpltCallback
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SPI_Aliased_Functions HAL SPI Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_SPI_FlushRxFifo                HAL_SPIEx_FlushRxFifo
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_TIM_Aliased_Functions HAL TIM Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_TIM_DMADelayPulseCplt                       TIM_DMADelayPulseCplt
 #define HAL_TIM_DMAError                                TIM_DMAError
 #define HAL_TIM_DMACaptureCplt                          TIM_DMACaptureCplt
@@ -2029,51 +2085,52 @@ extern "C" {
 #define HAL_TIMEx_ConfigCommutationEvent_DMA            HAL_TIMEx_ConfigCommutEvent_DMA
 #endif /* STM32H7 || STM32G0 || STM32F0 || STM32F1 || STM32F2 || STM32F3 || STM32F4 || STM32F7 || STM32L0 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_UART_Aliased_Functions HAL UART Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_UART_WakeupCallback HAL_UARTEx_WakeupCallback
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_LTDC_Aliased_Functions HAL LTDC Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define HAL_LTDC_LineEvenCallback HAL_LTDC_LineEventCallback
 #define HAL_LTDC_Relaod           HAL_LTDC_Reload
 #define HAL_LTDC_StructInitFromVideoConfig  HAL_LTDCEx_StructInitFromVideoConfig
 #define HAL_LTDC_StructInitFromAdaptedCommandConfig  HAL_LTDCEx_StructInitFromAdaptedCommandConfig
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_PPP_Aliased_Functions HAL PPP Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /* Exported macros ------------------------------------------------------------*/
 
 /** @defgroup HAL_AES_Aliased_Macros HAL CRYP Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define AES_IT_CC                      CRYP_IT_CC
 #define AES_IT_ERR                     CRYP_IT_ERR
 #define AES_FLAG_CCF                   CRYP_FLAG_CCF
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_Aliased_Macros HAL Generic Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_GET_BOOT_MODE                   __HAL_SYSCFG_GET_BOOT_MODE
 #define __HAL_REMAPMEMORY_FLASH               __HAL_SYSCFG_REMAPMEMORY_FLASH
 #define __HAL_REMAPMEMORY_SYSTEMFLASH         __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH
@@ -2095,13 +2152,21 @@ extern "C" {
 #define UFB_MODE_BitNumber                    UFB_MODE_BIT_NUMBER
 #define CMP_PD_BitNumber                      CMP_PD_BIT_NUMBER
 
+#if defined(STM32H7RS) || defined(STM32N6)
+#define FMC_SWAPBMAP_DISABLE                  FMC_SWAPBANK_MODE0
+#define FMC_SWAPBMAP_SDRAM_SRAM               FMC_SWAPBANK_MODE1
+#define HAL_SetFMCMemorySwappingConfig        HAL_FMC_SetBankSwapConfig
+#define HAL_GetFMCMemorySwappingConfig        HAL_FMC_GetBankSwapConfig
+#endif /* STM32H7RS || STM32N6 */
+
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_ADC_Aliased_Macros HAL ADC Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __ADC_ENABLE                                     __HAL_ADC_ENABLE
 #define __ADC_DISABLE                                    __HAL_ADC_DISABLE
 #define __HAL_ADC_ENABLING_CONDITIONS                    ADC_ENABLING_CONDITIONS
@@ -2180,24 +2245,24 @@ extern "C" {
 #define __HAL_ADC_CFGR1_DMACONTREQ                       ADC_CFGR1_DMACONTREQ
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DAC_Aliased_Macros HAL DAC Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_DHR12R1_ALIGNEMENT                        DAC_DHR12R1_ALIGNMENT
 #define __HAL_DHR12R2_ALIGNEMENT                        DAC_DHR12R2_ALIGNMENT
 #define __HAL_DHR12RD_ALIGNEMENT                        DAC_DHR12RD_ALIGNMENT
 #define IS_DAC_GENERATE_WAVE                            IS_DAC_WAVE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_DBGMCU_Aliased_Macros HAL DBGMCU Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_FREEZE_TIM1_DBGMCU __HAL_DBGMCU_FREEZE_TIM1
 #define __HAL_UNFREEZE_TIM1_DBGMCU __HAL_DBGMCU_UNFREEZE_TIM1
 #define __HAL_FREEZE_TIM2_DBGMCU __HAL_DBGMCU_FREEZE_TIM2
@@ -2229,6 +2294,7 @@ extern "C" {
 #define __HAL_UNFREEZE_TIM14_DBGMCU __HAL_DBGMCU_UNFREEZE_TIM14
 #define __HAL_FREEZE_CAN2_DBGMCU __HAL_DBGMCU_FREEZE_CAN2
 #define __HAL_UNFREEZE_CAN2_DBGMCU __HAL_DBGMCU_UNFREEZE_CAN2
+
 
 #define __HAL_FREEZE_TIM15_DBGMCU __HAL_DBGMCU_FREEZE_TIM15
 #define __HAL_UNFREEZE_TIM15_DBGMCU __HAL_DBGMCU_UNFREEZE_TIM15
@@ -2263,12 +2329,12 @@ extern "C" {
 #define __HAL_UNFREEZE_LPTIM2_DBGMCU __HAL_DBGMCU_UNFREEZE_LPTIM2
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_COMP_Aliased_Macros HAL COMP Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined(STM32F3)
 #define COMP_START                                       __HAL_COMP_ENABLE
 #define COMP_STOP                                        __HAL_COMP_DISABLE
@@ -2300,8 +2366,8 @@ extern "C" {
 #define __HAL_COMP_EXTI_CLEAR_FLAG(__FLAG__)             (((__FLAG__)  == COMP_EXTI_LINE_COMP2) ? __HAL_COMP_COMP2_EXTI_CLEAR_FLAG() : \
                                                           ((__FLAG__)  == COMP_EXTI_LINE_COMP4) ? __HAL_COMP_COMP4_EXTI_CLEAR_FLAG() : \
                                                           __HAL_COMP_COMP6_EXTI_CLEAR_FLAG())
-# endif
-# if defined(STM32F302xE) || defined(STM32F302xC)
+#endif
+#if defined(STM32F302xE) || defined(STM32F302xC)
 #define __HAL_COMP_EXTI_RISING_IT_ENABLE(__EXTILINE__)   (((__EXTILINE__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_ENABLE_RISING_EDGE() : \
                                                           ((__EXTILINE__)  == COMP_EXTI_LINE_COMP2) ? __HAL_COMP_COMP2_EXTI_ENABLE_RISING_EDGE() : \
                                                           ((__EXTILINE__)  == COMP_EXTI_LINE_COMP4) ? __HAL_COMP_COMP4_EXTI_ENABLE_RISING_EDGE() : \
@@ -2334,8 +2400,8 @@ extern "C" {
                                                           ((__FLAG__)  == COMP_EXTI_LINE_COMP2) ? __HAL_COMP_COMP2_EXTI_CLEAR_FLAG() : \
                                                           ((__FLAG__)  == COMP_EXTI_LINE_COMP4) ? __HAL_COMP_COMP4_EXTI_CLEAR_FLAG() : \
                                                           __HAL_COMP_COMP6_EXTI_CLEAR_FLAG())
-# endif
-# if defined(STM32F303xE) || defined(STM32F398xx) || defined(STM32F303xC) || defined(STM32F358xx)
+#endif
+#if defined(STM32F303xE) || defined(STM32F398xx) || defined(STM32F303xC) || defined(STM32F358xx)
 #define __HAL_COMP_EXTI_RISING_IT_ENABLE(__EXTILINE__)   (((__EXTILINE__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_ENABLE_RISING_EDGE() : \
                                                           ((__EXTILINE__)  == COMP_EXTI_LINE_COMP2) ? __HAL_COMP_COMP2_EXTI_ENABLE_RISING_EDGE() : \
                                                           ((__EXTILINE__)  == COMP_EXTI_LINE_COMP3) ? __HAL_COMP_COMP3_EXTI_ENABLE_RISING_EDGE() : \
@@ -2392,8 +2458,8 @@ extern "C" {
                                                           ((__FLAG__)  == COMP_EXTI_LINE_COMP5) ? __HAL_COMP_COMP5_EXTI_CLEAR_FLAG() : \
                                                           ((__FLAG__)  == COMP_EXTI_LINE_COMP6) ? __HAL_COMP_COMP6_EXTI_CLEAR_FLAG() : \
                                                           __HAL_COMP_COMP7_EXTI_CLEAR_FLAG())
-# endif
-# if defined(STM32F373xC) ||defined(STM32F378xx)
+#endif
+#if defined(STM32F373xC) ||defined(STM32F378xx)
 #define __HAL_COMP_EXTI_RISING_IT_ENABLE(__EXTILINE__)   (((__EXTILINE__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_ENABLE_RISING_EDGE() : \
                                                           __HAL_COMP_COMP2_EXTI_ENABLE_RISING_EDGE())
 #define __HAL_COMP_EXTI_RISING_IT_DISABLE(__EXTILINE__)  (((__EXTILINE__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_DISABLE_RISING_EDGE() : \
@@ -2410,7 +2476,7 @@ extern "C" {
                                                           __HAL_COMP_COMP2_EXTI_GET_FLAG())
 #define __HAL_COMP_EXTI_CLEAR_FLAG(__FLAG__)             (((__FLAG__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_CLEAR_FLAG() : \
                                                           __HAL_COMP_COMP2_EXTI_CLEAR_FLAG())
-# endif
+#endif
 #else
 #define __HAL_COMP_EXTI_RISING_IT_ENABLE(__EXTILINE__)   (((__EXTILINE__)  == COMP_EXTI_LINE_COMP1) ? __HAL_COMP_COMP1_EXTI_ENABLE_RISING_EDGE() : \
                                                           __HAL_COMP_COMP2_EXTI_ENABLE_RISING_EDGE())
@@ -2440,8 +2506,8 @@ extern "C" {
 #define __HAL_COMP_GET_FLAG(__HANDLE__, __FLAG__)  (__HAL_COMP_IS_LOCKED(__HANDLE__))
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 #if defined(STM32L0) || defined(STM32L4)
 /** @defgroup HAL_COMP_Aliased_Functions HAL COMP Aliased Functions maintained for legacy purpose
@@ -2457,20 +2523,20 @@ extern "C" {
 #endif
 
 /** @defgroup HAL_DAC_Aliased_Macros HAL DAC Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define IS_DAC_WAVE(WAVE) (((WAVE) == DAC_WAVE_NONE) || \
                            ((WAVE) == DAC_WAVE_NOISE)|| \
                            ((WAVE) == DAC_WAVE_TRIANGLE))
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_FLASH_Aliased_Macros HAL FLASH Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define IS_WRPAREA          IS_OB_WRPAREA
 #define IS_TYPEPROGRAM      IS_FLASH_TYPEPROGRAM
@@ -2480,12 +2546,12 @@ extern "C" {
 #define IS_OB_WDG_SOURCE    IS_OB_IWDG_SOURCE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_I2C_Aliased_Macros HAL I2C Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_I2C_RESET_CR2             I2C_RESET_CR2
 #define __HAL_I2C_GENERATE_START        I2C_GENERATE_START
@@ -2507,12 +2573,12 @@ extern "C" {
 #define __HAL_I2C_MEM_ADD_LSB           I2C_MEM_ADD_LSB
 #define __HAL_I2C_FREQRANGE             I2C_FREQRANGE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_I2S_Aliased_Macros HAL I2S Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define IS_I2S_INSTANCE                 IS_I2S_ALL_INSTANCE
 #define IS_I2S_INSTANCE_EXT             IS_I2S_ALL_INSTANCE_EXT
@@ -2522,12 +2588,12 @@ extern "C" {
 #endif
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_IRDA_Aliased_Macros HAL IRDA Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __IRDA_DISABLE                  __HAL_IRDA_DISABLE
 #define __IRDA_ENABLE                   __HAL_IRDA_ENABLE
@@ -2539,34 +2605,38 @@ extern "C" {
 
 #define IS_IRDA_ONEBIT_SAMPLE           IS_IRDA_ONE_BIT_SAMPLE
 
+
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_IWDG_Aliased_Macros HAL IWDG Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_IWDG_ENABLE_WRITE_ACCESS  IWDG_ENABLE_WRITE_ACCESS
 #define __HAL_IWDG_DISABLE_WRITE_ACCESS IWDG_DISABLE_WRITE_ACCESS
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_LPTIM_Aliased_Macros HAL LPTIM Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_LPTIM_ENABLE_INTERRUPT    __HAL_LPTIM_ENABLE_IT
 #define __HAL_LPTIM_DISABLE_INTERRUPT   __HAL_LPTIM_DISABLE_IT
 #define __HAL_LPTIM_GET_ITSTATUS        __HAL_LPTIM_GET_IT_SOURCE
 
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_OPAMP_Aliased_Macros HAL OPAMP Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __OPAMP_CSR_OPAXPD                OPAMP_CSR_OPAXPD
 #define __OPAMP_CSR_S3SELX                OPAMP_CSR_S3SELX
 #define __OPAMP_CSR_S4SELX                OPAMP_CSR_S4SELX
@@ -2582,12 +2652,13 @@ extern "C" {
 #define __OPAMP_OFFSET_TRIM_SET           OPAMP_OFFSET_TRIM_SET
 
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_PWR_Aliased_Macros HAL PWR Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_PVD_EVENT_DISABLE                                  __HAL_PWR_PVD_EXTI_DISABLE_EVENT
 #define __HAL_PVD_EVENT_ENABLE                                   __HAL_PWR_PVD_EXTI_ENABLE_EVENT
 #define __HAL_PVD_EXTI_FALLINGTRIGGER_DISABLE                    __HAL_PWR_PVD_EXTI_DISABLE_FALLING_EDGE
@@ -2644,12 +2715,13 @@ extern "C" {
 #define __HAL_PVD_EXTI_GET_FLAG                                  __HAL_PWR_PVD_EXTI_GET_FLAG
 #endif /* STM32F4 */
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_RCC_Aliased HAL RCC Aliased maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define RCC_StopWakeUpClock_MSI     RCC_STOP_WAKEUPCLOCK_MSI
 #define RCC_StopWakeUpClock_HSI     RCC_STOP_WAKEUPCLOCK_HSI
@@ -2706,6 +2778,12 @@ extern "C" {
 #define __APB1_RELEASE_RESET __HAL_RCC_APB1_RELEASE_RESET
 #define __APB2_FORCE_RESET __HAL_RCC_APB2_FORCE_RESET
 #define __APB2_RELEASE_RESET __HAL_RCC_APB2_RELEASE_RESET
+#if defined(STM32C0)
+#define __HAL_RCC_APB1_FORCE_RESET    __HAL_RCC_APB1_GRP1_FORCE_RESET
+#define __HAL_RCC_APB1_RELEASE_RESET  __HAL_RCC_APB1_GRP1_RELEASE_RESET
+#define __HAL_RCC_APB2_FORCE_RESET    __HAL_RCC_APB1_GRP2_FORCE_RESET
+#define __HAL_RCC_APB2_RELEASE_RESET  __HAL_RCC_APB1_GRP2_RELEASE_RESET
+#endif /* STM32C0 */
 #define __BKP_CLK_DISABLE __HAL_RCC_BKP_CLK_DISABLE
 #define __BKP_CLK_ENABLE __HAL_RCC_BKP_CLK_ENABLE
 #define __BKP_FORCE_RESET __HAL_RCC_BKP_FORCE_RESET
@@ -3629,8 +3707,11 @@ extern "C" {
 #define RCC_MCOSOURCE_PLLCLK_NODIV  RCC_MCO1SOURCE_PLLCLK
 #define RCC_MCOSOURCE_PLLCLK_DIV2   RCC_MCO1SOURCE_PLLCLK_DIV2
 
-#if defined(STM32L4) || defined(STM32WB) || defined(STM32G0) || defined(STM32G4) || defined(STM32L5) || \
-    defined(STM32WL) || defined(STM32C0)
+#if defined(STM32U0)
+#define RCC_SYSCLKSOURCE_STATUS_PLLR   RCC_SYSCLKSOURCE_STATUS_PLLCLK
+#endif
+
+#if defined(STM32L4) || defined(STM32WB) || defined(STM32G0) || defined(STM32G4) || defined(STM32L5) ||  defined(STM32WL) || defined(STM32C0) || defined(STM32N6) || defined(STM32H7RS) ||  defined(STM32U0)
 #define RCC_RTCCLKSOURCE_NO_CLK     RCC_RTCCLKSOURCE_NONE
 #else
 #define RCC_RTCCLKSOURCE_NONE       RCC_RTCCLKSOURCE_NO_CLK
@@ -3732,8 +3813,10 @@ extern "C" {
 #define __HAL_RCC_GET_DFSDM_SOURCE  __HAL_RCC_GET_DFSDM1_SOURCE
 #define RCC_DFSDM1CLKSOURCE_PCLK    RCC_DFSDM1CLKSOURCE_PCLK2
 #define RCC_SWPMI1CLKSOURCE_PCLK    RCC_SWPMI1CLKSOURCE_PCLK1
+#if !defined(STM32U0)
 #define RCC_LPTIM1CLKSOURCE_PCLK    RCC_LPTIM1CLKSOURCE_PCLK1
 #define RCC_LPTIM2CLKSOURCE_PCLK    RCC_LPTIM2CLKSOURCE_PCLK1
+#endif
 
 #define RCC_DFSDM1AUDIOCLKSOURCE_I2SAPB1    RCC_DFSDM1AUDIOCLKSOURCE_I2S1
 #define RCC_DFSDM1AUDIOCLKSOURCE_I2SAPB2    RCC_DFSDM1AUDIOCLKSOURCE_I2S2
@@ -3862,24 +3945,22 @@ extern "C" {
 #endif /* STM32H5 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_RNG_Aliased_Macros HAL RNG Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define  HAL_RNG_ReadyCallback(__HANDLE__)  HAL_RNG_ReadyDataCallback((__HANDLE__), uint32_t random32bit)
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_RTC_Aliased_Macros HAL RTC Aliased Macros maintained for legacy purpose
- * @{
- */
-#if defined (STM32G0) || defined (STM32L5) || defined (STM32L412xx) || defined (STM32L422xx) || \
-    defined (STM32L4P5xx)|| defined (STM32L4Q5xx) || defined (STM32G4) || defined (STM32WL) || defined (STM32U5) || \
-    defined (STM32WBA) || defined (STM32H5) || defined (STM32C0)
+  * @{
+  */
+#if defined (STM32G0) || defined (STM32L5) || defined (STM32L412xx) || defined (STM32L422xx) ||  defined (STM32L4P5xx)|| defined (STM32L4Q5xx) || defined (STM32G4) || defined (STM32WL) || defined (STM32U5) || defined (STM32WBA) || defined (STM32H5) ||  defined (STM32C0) || defined (STM32N6) || defined (STM32H7RS) || defined (STM32U0) || defined (STM32U3)
 #else
 #define __HAL_RTC_CLEAR_FLAG                      __HAL_RTC_EXTI_CLEAR_FLAG
 #endif
@@ -3945,12 +4026,12 @@ extern "C" {
 #endif   /* STM32H5 */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SD_Aliased_Macros HAL SD/MMC Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define SD_OCR_CID_CSD_OVERWRIETE   SD_OCR_CID_CSD_OVERWRITE
 #define SD_CMD_SD_APP_STAUS         SD_CMD_SD_APP_STATUS
@@ -4035,12 +4116,12 @@ extern "C" {
 #define HAL_SD_DriveTransciver_1_8V_Callback          HAL_SD_DriveTransceiver_1_8V_Callback
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SMARTCARD_Aliased_Macros HAL SMARTCARD Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __SMARTCARD_ENABLE_IT           __HAL_SMARTCARD_ENABLE_IT
 #define __SMARTCARD_DISABLE_IT          __HAL_SMARTCARD_DISABLE_IT
@@ -4055,12 +4136,12 @@ extern "C" {
 #define IS_SMARTCARD_ONEBIT_SAMPLING    IS_SMARTCARD_ONE_BIT_SAMPLE
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SMBUS_Aliased_Macros HAL SMBUS Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_SMBUS_RESET_CR1           SMBUS_RESET_CR1
 #define __HAL_SMBUS_RESET_CR2           SMBUS_RESET_CR2
 #define __HAL_SMBUS_GENERATE_START      SMBUS_GENERATE_START
@@ -4070,24 +4151,24 @@ extern "C" {
 #define __HAL_SMBUS_GET_PEC_MODE        SMBUS_GET_PEC_MODE
 #define __HAL_SMBUS_GET_ALERT_ENABLED   SMBUS_GET_ALERT_ENABLED
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SPI_Aliased_Macros HAL SPI Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_SPI_1LINE_TX              SPI_1LINE_TX
 #define __HAL_SPI_1LINE_RX              SPI_1LINE_RX
 #define __HAL_SPI_RESET_CRC             SPI_RESET_CRC
 
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_UART_Aliased_Macros HAL UART Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_UART_GETCLOCKSOURCE       UART_GETCLOCKSOURCE
 #define __HAL_UART_MASK_COMPUTATION     UART_MASK_COMPUTATION
@@ -4100,12 +4181,13 @@ extern "C" {
 #define IS_UART_ONEBIT_SAMPLING         IS_UART_ONE_BIT_SAMPLE
 
 /**
- * @}
- */
+  * @}
+  */
+
 
 /** @defgroup HAL_USART_Aliased_Macros HAL USART Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __USART_ENABLE_IT               __HAL_USART_ENABLE_IT
 #define __USART_DISABLE_IT              __HAL_USART_DISABLE_IT
@@ -4123,12 +4205,12 @@ extern "C" {
                                              ((__SAMPLING__) == USART_OVERSAMPLING_8))
 #endif /* STM32F0 || STM32F3 || STM32F7 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_USB_Aliased_Macros HAL USB Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define USB_EXTI_LINE_WAKEUP                               USB_WAKEUP_EXTI_LINE
 
 #define USB_FS_EXTI_TRIGGER_RISING_EDGE                    USB_OTG_FS_WAKEUP_EXTI_RISING_EDGE
@@ -4172,13 +4254,40 @@ extern "C" {
 
 #define HAL_PCD_SetTxFiFo                                  HAL_PCDEx_SetTxFiFo
 #define HAL_PCD_SetRxFiFo                                  HAL_PCDEx_SetRxFiFo
+#if defined(STM32U5)
+#define USB_OTG_GOTGCTL_BSESVLD                            USB_OTG_GOTGCTL_BSVLD
+#define USB_OTG_GAHBCFG_GINT                               USB_OTG_GAHBCFG_GINTMSK
+#define USB_OTG_GUSBCFG_PHYLPCS                            USB_OTG_GUSBCFG_PHYLPC
+#define USB_OTG_GRSTCTL_HSRST                              USB_OTG_GRSTCTL_PSRST
+#define USB_OTG_GINTSTS_BOUTNAKEFF                         USB_OTG_GINTSTS_GONAKEFF
+#define USB_OTG_GINTSTS_WKUINT                             USB_OTG_GINTSTS_WKUPINT
+#define USB_OTG_GINTMSK_PXFRM_IISOOXFRM                    USB_OTG_GINTMSK_IPXFRM_IISOOXFRM
+#define USB_OTG_GRXSTSP_EPNUM                              USB_OTG_GRXSTSP_EPNUM_CHNUM
+#define USB_OTG_GLPMCFG_L1ResumeOK                         USB_OTG_GLPMCFG_L1RSMOK
+#define USB_OTG_HPTXFSIZ_PTXFD                             USB_OTG_HPTXFSIZ_PTXFSIZ
+#define USB_OTG_HCCHAR_MC                                  USB_OTG_HCCHAR_MCNT
+#define USB_OTG_HCCHAR_MC_0                                USB_OTG_HCCHAR_MCNT_0
+#define USB_OTG_HCCHAR_MC_1                                USB_OTG_HCCHAR_MCNT_1
+#define USB_OTG_HCINTMSK_AHBERR                            USB_OTG_HCINTMSK_AHBERRM
+#define USB_OTG_HCTSIZ_DOPING                              USB_OTG_HCTSIZ_DOPNG
+#define USB_OTG_DOEPMSK_OPEM                               USB_OTG_DOEPMSK_OUTPKTERRM
+#define USB_OTG_DIEPCTL_SODDFRM                            USB_OTG_DIEPCTL_SD1PID_SODDFRM
+#define USB_OTG_DIEPTSIZ_MULCNT                            USB_OTG_DIEPTSIZ_MCNT
+#define USB_OTG_DOEPCTL_SODDFRM                            USB_OTG_DOEPCTL_SD1PID_SODDFRM
+#define USB_OTG_DOEPCTL_DPID                               USB_OTG_DOEPCTL_DPID_EONUM
+#define USB_OTG_DOEPTSIZ_STUPCNT                           USB_OTG_DOEPTSIZ_RXDPID
+#define USB_OTG_DOEPTSIZ_STUPCNT_0                         USB_OTG_DOEPTSIZ_RXDPID_0
+#define USB_OTG_DOEPTSIZ_STUPCNT_1                         USB_OTG_DOEPTSIZ_RXDPID_1
+#define USB_OTG_PCGCCTL_STOPCLK                            USB_OTG_PCGCCTL_STPPCLK
+#define USB_OTG_PCGCCTL_GATECLK                            USB_OTG_PCGCCTL_GATEHCLK
+#endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_TIM_Aliased_Macros HAL TIM Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_TIM_SetICPrescalerValue   TIM_SET_ICPRESCALERVALUE
 #define __HAL_TIM_ResetICPrescalerValue TIM_RESET_ICPRESCALERVALUE
 
@@ -4205,12 +4314,12 @@ extern "C" {
 #define TIM_OCMODE_ASSYMETRIC_PWM1      TIM_OCMODE_ASYMMETRIC_PWM1
 #define TIM_OCMODE_ASSYMETRIC_PWM2      TIM_OCMODE_ASYMMETRIC_PWM2
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_ETH_Aliased_Macros HAL ETH Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 #define __HAL_ETH_EXTI_ENABLE_IT                   __HAL_ETH_WAKEUP_EXTI_ENABLE_IT
 #define __HAL_ETH_EXTI_DISABLE_IT                  __HAL_ETH_WAKEUP_EXTI_DISABLE_IT
@@ -4224,21 +4333,21 @@ extern "C" {
 #define ETH_PROMISCIOUSMODE_DISABLE  ETH_PROMISCUOUS_MODE_DISABLE
 #define IS_ETH_PROMISCIOUS_MODE      IS_ETH_PROMISCUOUS_MODE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_LTDC_Aliased_Macros HAL LTDC Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define __HAL_LTDC_LAYER LTDC_LAYER
 #define __HAL_LTDC_RELOAD_CONFIG  __HAL_LTDC_RELOAD_IMMEDIATE_CONFIG
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SAI_Aliased_Macros HAL SAI Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #define SAI_OUTPUTDRIVE_DISABLED          SAI_OUTPUTDRIVE_DISABLE
 #define SAI_OUTPUTDRIVE_ENABLED           SAI_OUTPUTDRIVE_ENABLE
 #define SAI_MASTERDIVIDER_ENABLED         SAI_MASTERDIVIDER_ENABLE
@@ -4254,24 +4363,24 @@ extern "C" {
 #define SAI_SYNCHRONOUS_EXT               SAI_SYNCHRONOUS_EXT_SAI1
 #define SAI_SYNCEXT_IN_ENABLE             SAI_SYNCEXT_OUTBLOCKA_ENABLE
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_SPDIFRX_Aliased_Macros HAL SPDIFRX Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined(STM32H7)
 #define HAL_SPDIFRX_ReceiveControlFlow      HAL_SPDIFRX_ReceiveCtrlFlow
 #define HAL_SPDIFRX_ReceiveControlFlow_IT   HAL_SPDIFRX_ReceiveCtrlFlow_IT
 #define HAL_SPDIFRX_ReceiveControlFlow_DMA  HAL_SPDIFRX_ReceiveCtrlFlow_DMA
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_HRTIM_Aliased_Functions HAL HRTIM Aliased Functions maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined (STM32H7) || defined (STM32G4) || defined (STM32F3)
 #define HAL_HRTIM_WaveformCounterStart_IT      HAL_HRTIM_WaveformCountStart_IT
 #define HAL_HRTIM_WaveformCounterStart_DMA     HAL_HRTIM_WaveformCountStart_DMA
@@ -4281,40 +4390,41 @@ extern "C" {
 #define HAL_HRTIM_WaveformCounterStop          HAL_HRTIM_WaveformCountStop
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_QSPI_Aliased_Macros HAL QSPI Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined (STM32L4) || defined (STM32F4) || defined (STM32F7) || defined(STM32H7)
 #define HAL_QPSI_TIMEOUT_DEFAULT_VALUE HAL_QSPI_TIMEOUT_DEFAULT_VALUE
 #endif /* STM32L4 || STM32F4 || STM32F7 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_Generic_Aliased_Macros HAL Generic Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 #if defined (STM32F7)
 #define ART_ACCLERATOR_ENABLE ART_ACCELERATOR_ENABLE
 #endif /* STM32F7 */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup HAL_PPP_Aliased_Macros HAL PPP Aliased Macros maintained for legacy purpose
- * @{
- */
+  * @{
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* STM32_HAL_LEGACY */
+
 

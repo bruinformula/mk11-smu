@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (13.3.rel1)
+# Toolchain: GNU Tools for STM32 (14.3.rel1)
 ################################################################################
 
 -include ../makefile.init
@@ -60,8 +60,8 @@ all: main-build
 main-build: mk11-smu.elf secondary-outputs
 
 # Tool invocations
-mk11-smu.elf mk11-smu.map: $(OBJS) $(USER_OBJS) /Users/omidj/Documents/Projects/Code\ Projects/mk11-smu/STM32L552CCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "mk11-smu.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"/Users/omidj/Documents/Projects/Code Projects/mk11-smu/STM32L552CCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="mk11-smu.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+mk11-smu.elf mk11-smu.map: $(OBJS) $(USER_OBJS) /Users/guestaccount/STM32CubeIDE/workspace_1.19.0/mk11-smu/STM32L552CCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "mk11-smu.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"/Users/guestaccount/STM32CubeIDE/workspace_1.19.0/mk11-smu/STM32L552CCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="mk11-smu.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
