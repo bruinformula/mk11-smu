@@ -118,14 +118,22 @@ static void State_UpdateGpsNav(float dt_s) {
 
 	gps1_velocity_mps = gps1_vel_kf_state_mps;
 
-	if ((gps_data.fix_valid == 1U)
+	if (gps_data.heading_valid == 1U) {
+		heading_error_deg = AngleDiffDeg(gps_data.heading_deg, imu1_yaw_deg);
+		imu1_yaw_deg = WrapAngleDeg(
+				imu1_yaw_deg + (GPS1_HEADING_BLEND_GAIN * heading_error_deg));
+	} else if ((gps_data.fix_valid == 1U)
 			&& (gps1_velocity_mps >= GPS1_HEADING_MIN_SPEED_MPS)) {
 		heading_error_deg = AngleDiffDeg(gps_data.course_deg, imu1_yaw_deg);
 		imu1_yaw_deg = WrapAngleDeg(
 				imu1_yaw_deg + (GPS1_HEADING_BLEND_GAIN * heading_error_deg));
 	}
 
-	gps1_heading_deg = WrapAngleDeg(imu1_yaw_deg);
+	if (gps_data.heading_valid == 1U) {
+		gps1_heading_deg = WrapAngleDeg(gps_data.heading_deg);
+	} else {
+		gps1_heading_deg = WrapAngleDeg(imu1_yaw_deg);
+	}
 }
 
 HAL_StatusTypeDef State_Init(void) {

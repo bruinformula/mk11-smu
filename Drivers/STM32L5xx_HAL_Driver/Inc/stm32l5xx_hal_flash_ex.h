@@ -1,19 +1,19 @@
 /**
- ******************************************************************************
- * @file    stm32l5xx_hal_flash_ex.h
- * @author  MCD Application Team
- * @brief   Header file of FLASH HAL Extended module.
- ******************************************************************************
- * @attention
- *
- * Copyright (c) 2019 STMicroelectronics.
- * All rights reserved.
- *
- * This software is licensed under terms that can be found in the LICENSE file in
- * the root directory of this software component.
- * If no LICENSE file comes with this software, it is provided AS-IS.
- ******************************************************************************
- */
+  ******************************************************************************
+  * @file    stm32l5xx_hal_flash_ex.h
+  * @author  MCD Application Team
+  * @brief   Header file of FLASH HAL Extended module.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2019 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file in
+  * the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  ******************************************************************************
+  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef STM32L5xx_HAL_FLASH_EX_H
@@ -27,12 +27,12 @@
 #include "stm32l5xx_hal_def.h"
 
 /** @addtogroup STM32L5xx_HAL_Driver
- * @{
- */
+  * @{
+  */
 
 /** @addtogroup FLASHEx
- * @{
- */
+  * @{
+  */
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 /* Private constants ---------------------------------------------------------*/
@@ -68,17 +68,17 @@ typedef struct
 
 /* Exported constants --------------------------------------------------------*/
 /** @defgroup FLASHEx_Exported_Constants FLASH Extended Exported Constants
- * @{
- */
+  * @{
+  */
 
 /** @defgroup FLASHEx_PRIV_MODE_CFG FLASH privilege mode configuration
- * @{
- */
+  * @{
+  */
 #define FLASH_PRIV_GRANTED   0x00000000U          /*!< access to Flash registers is granted */
 #define FLASH_PRIV_DENIED    FLASH_PRIVCFGR_PRIV /*!< access to Flash registers is denied to non-privilege access */
 /**
- * @}
- */
+  * @}
+  */
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 /** @defgroup FLASHEx_SEC_INVERSION_CFG FLASH security inversion configuration
@@ -92,70 +92,69 @@ typedef struct
 #endif
 
 /** @defgroup FLASHEx_LVE_PIN_CFG FLASH LVE pin configuration
- * @{
- */
+  * @{
+  */
 #define FLASH_LVE_PIN_CTRL   0x00000000U       /*!< LVEA/B FLASH pin controlled by power controller */
 #define FLASH_LVE_PIN_FORCED FLASH_ACR_LVEN    /*!< LVEA/B FLASH pin enforced to low */
 /**
- * @}
- */
+  * @}
+  */
 
 /** @defgroup FLASHEx_BB_Attributes FLASH Block-Based Attributes
- * @{
- */
+  * @{
+  */
 #define FLASH_BB_SEC         0x00000001U       /*!< Flash Block-Based Security Attributes */
 /**
- * @}
- */
+  * @}
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /* Exported macro ------------------------------------------------------------*/
 
 /* Exported functions --------------------------------------------------------*/
 /** @addtogroup FLASHEx_Exported_Functions
- * @{
- */
+  * @{
+  */
 
 /* Extended Program operation functions  *************************************/
 /** @addtogroup FLASHEx_Exported_Functions_Group1
- * @{
- */
-HAL_StatusTypeDef HAL_FLASHEx_Erase(FLASH_EraseInitTypeDef *pEraseInit,
-		uint32_t *PageError);
+  * @{
+  */
+HAL_StatusTypeDef HAL_FLASHEx_Erase(FLASH_EraseInitTypeDef *pEraseInit, uint32_t *PageError);
 HAL_StatusTypeDef HAL_FLASHEx_Erase_IT(FLASH_EraseInitTypeDef *pEraseInit);
 HAL_StatusTypeDef HAL_FLASHEx_OBProgram(FLASH_OBProgramInitTypeDef *pOBInit);
-void HAL_FLASHEx_OBGetConfig(FLASH_OBProgramInitTypeDef *pOBInit);
+void              HAL_FLASHEx_OBGetConfig(FLASH_OBProgramInitTypeDef *pOBInit);
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 HAL_StatusTypeDef HAL_FLASHEx_ConfigBBAttributes(FLASH_BBAttributesTypeDef *pBBAttributes);
 void              HAL_FLASHEx_GetConfigBBAttributes(FLASH_BBAttributesTypeDef *pBBAttributes);
 void              HAL_FLASHEx_EnableSecHideProtection(uint32_t Banks);
 #endif
 /**
- * @}
- */
+  * @}
+  */
 
 /* Extended Peripheral Control functions  ************************************/
 /** @addtogroup FLASHEx_Exported_Functions_Group2
- * @{
- */
-void HAL_FLASHEx_ConfigPrivMode(uint32_t PrivMode);
-uint32_t HAL_FLASHEx_GetPrivMode(void);
+  * @{
+  */
+void              HAL_FLASHEx_ConfigPrivMode(uint32_t PrivMode);
+uint32_t          HAL_FLASHEx_GetPrivMode(void);
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 HAL_StatusTypeDef HAL_FLASHEx_ConfigSecInversion(uint32_t SecInvState);
 uint32_t          HAL_FLASHEx_GetSecInversion(void);
 #endif
 HAL_StatusTypeDef HAL_FLASHEx_ConfigLVEPin(uint32_t ConfigLVE);
-uint32_t HAL_FLASHEx_GetLVEPin(void);
+uint32_t          HAL_FLASHEx_GetLVEPin(void);
 /**
- * @}
- */
+  * @}
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /* Private function ----------------------------------------------------------*/
 /** @addtogroup FLASHEx_Private_Functions FLASHEx Private Functions
@@ -163,8 +162,8 @@ uint32_t HAL_FLASHEx_GetLVEPin(void);
  */
 void FLASH_PageErase(uint32_t Page, uint32_t Banks);
 /**
- * @}
- */
+  * @}
+  */
 
 /* Private macros ------------------------------------------------------------*/
 /** @defgroup FLASHEx_Private_Macros FLASH Extended Private Macros
@@ -182,16 +181,16 @@ void FLASH_PageErase(uint32_t Page, uint32_t Banks);
                                             ((CFG) == FLASH_LVE_PIN_FORCED))
 
 /**
- * @}
- */
+  * @}
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 /**
- * @}
- */
+  * @}
+  */
 
 #ifdef __cplusplus
 }

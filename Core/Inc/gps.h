@@ -15,11 +15,17 @@ typedef struct {
 	uint8_t fix_valid;
 	uint8_t fix_quality;
 	uint8_t satellites;
+	uint8_t heading_valid;
+	uint8_t heading_quality;
 	float latitude_deg;
 	float longitude_deg;
 	float speed_knots;
 	float speed_kph;
 	float course_deg;
+	float heading_deg;
+	float heading_accuracy_deg;
+	float baseline_length_m;
+	float pitch_deg;
 	float altitude_m;
 	float hdop;
 	char utc_time[16];
@@ -35,6 +41,7 @@ extern volatile uint32_t gps_sentence_count;
 extern volatile uint32_t gps_rmc_count;
 extern volatile uint32_t gps_gga_count;
 extern volatile uint32_t gps_vtg_count;
+extern volatile uint32_t gps_pqtmtar_count;
 
 HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart);
 HAL_StatusTypeDef GPS_StartReceiveIT(void);
