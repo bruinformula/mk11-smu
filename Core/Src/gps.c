@@ -4,8 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define GPS_DEFAULT_BAUD_RATE   921600
-#define GPS_PQTMTAR_ENABLE_CMD  "$PQTMCFGMSGRATE,W,PQTMTAR,1,1*09\r\n"
+#define GPS_DEFAULT_BAUD_RATE 921600
 
 static UART_HandleTypeDef *gps_uart = NULL;
 static uint8_t gps_rx_byte = 0U;
@@ -15,7 +14,6 @@ static uint8_t gps_rx_buffer[GPS_RX_BUFFER_SIZE];
 
 static char gps_line_buffer[GPS_LINE_BUFFER_SIZE];
 static uint16_t gps_line_index = 0U;
-static uint8_t gps_heading_command_sent = 0U;
 
 volatile GPS_Data_t gps_data = {0};
 volatile uint32_t gps_rx_count = 0U;
@@ -50,19 +48,6 @@ static HAL_StatusTypeDef GPS_RearmReceiveIT(void)
   }
 
   return status;
-}
-
-static HAL_StatusTypeDef GPS_SendCommand(const char *command)
-{
-  if ((gps_uart == NULL) || (command == NULL))
-  {
-    return HAL_ERROR;
-  }
-
-  return HAL_UART_Transmit(gps_uart,
-                           (uint8_t *)command,
-                           (uint16_t)strlen(command),
-                           100U);
 }
 
 static uint32_t GPS_SplitFields(char *buffer, char *fields[], uint32_t max_fields)
@@ -285,7 +270,6 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   gps_rx_head = 0U;
   gps_rx_tail = 0U;
   gps_line_index = 0U;
-  gps_heading_command_sent = 0U;
   gps_sentence_ready = 0U;
 
   memset((void *)&gps_data, 0, sizeof(gps_data));
@@ -309,24 +293,12 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
 
 HAL_StatusTypeDef GPS_StartReceiveIT(void)
 {
-  HAL_StatusTypeDef status;
-
   if (gps_uart == NULL)
   {
     return HAL_ERROR;
   }
 
-  status = GPS_RearmReceiveIT();
-
-  if ((status == HAL_OK) && (gps_heading_command_sent == 0U))
-  {
-    if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
-    {
-      gps_heading_command_sent = 1U;
-    }
-  }
-
-  return status;
+  return GPS_RearmReceiveIT();
 }
 
 void GPS_UART_RxCpltCallback(UART_HandleTypeDef *huart)

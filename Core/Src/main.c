@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <string.h>
 
 #include "imu.h"
 #include "gps.h"
@@ -37,6 +38,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define GNSS_BOOT_DELAY_MS       1500U
+#define GNSS_SAVE_DELAY_MS       1500U
+#define GNSS_COMMAND_TIMEOUT_MS  1000U
+
+#define GNSS_ROVER_MODE_CMD      "$PQTMCFGRCVRMODE,W,2*29\r\n"
+#define GNSS_ROVER_GGA_CMD       "$PAIR062,0,1*12\r\n"
+#define GNSS_BASE_MODE_CMD       "$PQTMCFGRCVRMODE,W,1*2A\r\n"
+#define GNSS_BASE_PQTMTAR_ON_CMD "$PQTMCFGMSGRATE,W,PQTMTAR,1,1*09\r\n"
+#define GNSS_BASE_PQTMTAR_OFF_CMD "$PQTMCFGMSGRATE,W,PQTMTAR,0,0*09\r\n"
+#define GNSS_SAVE_PARAMETERS_CMD "$PQTMSAVEPAR*5A\r\n"
 
 /* USER CODE END PD */
 
@@ -50,6 +61,7 @@ FDCAN_HandleTypeDef hfdcan1;
 
 SPI_HandleTypeDef hspi1;
 
+UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
@@ -65,6 +77,13 @@ UART_HandleTypeDef huart3;
  * imu_az_corr_g
  * imu1_pitch_deg
  * imu1_roll_deg
+ * gnss_config_ok
+ * gnss_enable_pqtmtar
+ * gnss_apply_config_request
+ * base_reset_pin_state
+ * rover_reset_pin_state
+ * base_wakeup_pin_state
+ * rover_wakeup_pin_state
  *
  * gps_data.fix_valid
  * gps_data.satellites
@@ -93,10 +112,16 @@ volatile int16_t imu_az_raw = 0;
 
 volatile uint8_t gps_init_ok = 0U;
 volatile uint8_t gps_rx_start_ok = 0U;
+volatile uint8_t gnss_config_ok = 0U;
+volatile uint8_t gnss_enable_pqtmtar = 0U;
+volatile uint8_t gnss_apply_config_request = 0U;
 volatile uint8_t pps_init_ok = 0U;
 volatile uint8_t state_init_ok = 0U;
 volatile uint8_t can_init_ok = 0U;
-volatile uint8_t gps_mode_pin_state = 0U;
+volatile uint8_t base_reset_pin_state = 0U;
+volatile uint8_t rover_reset_pin_state = 0U;
+volatile uint8_t base_wakeup_pin_state = 0U;
+volatile uint8_t rover_wakeup_pin_state = 0U;
 volatile uint32_t gps_uart_error_count = 0U;
 volatile uint32_t gps_uart_abort_count = 0U;
 volatile uint32_t gps_uart_irq_count = 0U;
@@ -113,12 +138,113 @@ static void MX_ICACHE_Init(void);
 static void MX_FDCAN1_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void GNSS_RefreshPinStates(void) {
+  base_reset_pin_state = (uint8_t) HAL_GPIO_ReadPin(BASE_RST_GPIO_Port,
+      BASE_RST_Pin);
+  rover_reset_pin_state = (uint8_t) HAL_GPIO_ReadPin(ROVER_RST_GPIO_Port,
+      ROVER_RST_Pin);
+  base_wakeup_pin_state = (uint8_t) HAL_GPIO_ReadPin(BASE_WKUP_GPIO_Port,
+      BASE_WKUP_Pin);
+  rover_wakeup_pin_state = (uint8_t) HAL_GPIO_ReadPin(ROVER_WKUP_GPIO_Port,
+      ROVER_WKUP_Pin);
+}
+
+static void GNSS_SetWakePinsHigh(void) {
+  HAL_GPIO_WritePin(BASE_WKUP_GPIO_Port, BASE_WKUP_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(ROVER_WKUP_GPIO_Port, ROVER_WKUP_Pin, GPIO_PIN_SET);
+  GNSS_RefreshPinStates();
+}
+
+static void GNSS_SetResetPins(GPIO_PinState base_state,
+    GPIO_PinState rover_state) {
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, base_state);
+  HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, rover_state);
+  GNSS_RefreshPinStates();
+}
+
+static HAL_StatusTypeDef GNSS_SendCommand(UART_HandleTypeDef *uart,
+    const char *command) {
+  if ((uart == NULL) || (command == NULL)) {
+    return HAL_ERROR;
+  }
+
+  return HAL_UART_Transmit(uart, (uint8_t*) command,
+      (uint16_t) strlen(command), GNSS_COMMAND_TIMEOUT_MS);
+}
+
+static HAL_StatusTypeDef GNSS_SendBasePqtmtarCommand(void) {
+  const char *command;
+
+  command = (gnss_enable_pqtmtar != 0U) ? GNSS_BASE_PQTMTAR_ON_CMD :
+      GNSS_BASE_PQTMTAR_OFF_CMD;
+
+  return GNSS_SendCommand(&huart3, command);
+}
+
+static HAL_StatusTypeDef GNSS_ProgramModules(void) {
+  HAL_StatusTypeDef status = HAL_OK;
+
+  GNSS_SetWakePinsHigh();
+
+  GNSS_SetResetPins(GPIO_PIN_RESET, GPIO_PIN_SET);
+  HAL_Delay(GNSS_BOOT_DELAY_MS);
+
+  if (GNSS_SendCommand(&huart1, GNSS_ROVER_MODE_CMD) != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+  HAL_Delay(150);
+
+  if (GNSS_SendCommand(&huart1, GNSS_ROVER_GGA_CMD) != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+  HAL_Delay(150);
+
+  if (GNSS_SendCommand(&huart1, GNSS_SAVE_PARAMETERS_CMD) != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+  HAL_Delay(150);
+
+  HAL_Delay(GNSS_SAVE_DELAY_MS);
+
+  GNSS_SetResetPins(GPIO_PIN_SET, GPIO_PIN_RESET);
+  HAL_Delay(GNSS_BOOT_DELAY_MS);
+
+  if (GNSS_SendCommand(&huart3, GNSS_BASE_MODE_CMD) != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+  HAL_Delay(150);
+
+  if (GNSS_SendBasePqtmtarCommand() != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+  HAL_Delay(150);
+
+  if (GNSS_SendCommand(&huart3, GNSS_SAVE_PARAMETERS_CMD) != HAL_OK) {
+    status = HAL_ERROR;
+    goto done;
+  }
+
+  HAL_Delay(GNSS_SAVE_DELAY_MS);
+
+done:
+  GNSS_SetWakePinsHigh();
+  GNSS_SetResetPins(GPIO_PIN_SET, GPIO_PIN_SET);
+
+  return status;
+}
+
 static const char* GPS_QualityText(uint8_t quality) {
   switch (quality) {
   case 0U:
@@ -230,14 +356,12 @@ int main(void)
   MX_FDCAN1_Init();
   MX_USART3_UART_Init();
   MX_USART2_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 	HAL_Delay(50);
 
-  HAL_GPIO_WritePin(GPS_MODE_GPIO_Port, GPS_MODE_Pin, GPIO_PIN_RESET);
-	gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(GPS_MODE_GPIO_Port,
-	GPS_MODE_Pin);
-
-	PPS_ForcePinConfig();
+  gnss_config_ok = (GNSS_ProgramModules() == HAL_OK) ? 1U : 0U;
+  PPS_ForcePinConfig();
 
 	if (IMU_Init(&hspi1) == HAL_OK) {
 		imu_init_ok = 1U;
@@ -274,12 +398,6 @@ int main(void)
 	} else {
 		can_init_ok = 0U;
 	}
-
-	HAL_Delay(100);
-
-	  HAL_GPIO_WritePin(GPS_MODE_GPIO_Port, GPS_MODE_Pin, GPIO_PIN_SET);
-		gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(GPS_MODE_GPIO_Port,
-		GPS_MODE_Pin);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -287,8 +405,13 @@ int main(void)
 	while (1) {
 		uint32_t now = HAL_GetTick();
 
-		gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(GPS_MODE_GPIO_Port,
-		GPS_MODE_Pin);
+    GNSS_RefreshPinStates();
+
+    if (gnss_apply_config_request != 0U) {
+      gnss_apply_config_request = 0U;
+      gnss_config_ok = (GNSS_ProgramModules() == HAL_OK) ? 1U : 0U;
+      (void) GPS_StartReceiveIT();
+    }
 
 		PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
 		GPS_Process();
@@ -489,6 +612,54 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 921600;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -601,20 +772,36 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|GPS_MODE_Pin|GPS2_PWR_WKUP_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|BASE_RST_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : IMU_CS_Pin GPS_MODE_Pin GPS2_PWR_WKUP_Pin */
-  GPIO_InitStruct.Pin = IMU_CS_Pin|GPS_MODE_Pin|GPS2_PWR_WKUP_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, BASE_WKUP_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, ROVER_RST_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, ROVER_WKUP_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pins : IMU_CS_Pin BASE_RST_Pin BASE_WKUP_Pin */
+  GPIO_InitStruct.Pin = IMU_CS_Pin|BASE_RST_Pin|BASE_WKUP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : GPS_1PPS_Pin */
-  GPIO_InitStruct.Pin = GPS_1PPS_Pin;
+  /*Configure GPIO pins : ROVER_RST_Pin ROVER_WKUP_Pin */
+  GPIO_InitStruct.Pin = ROVER_RST_Pin|ROVER_WKUP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BASE_1PPS_Pin */
+  GPIO_InitStruct.Pin = BASE_1PPS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPS_1PPS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(BASE_1PPS_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
