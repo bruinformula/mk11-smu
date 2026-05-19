@@ -12,6 +12,7 @@ static uint8_t gps_rx_buffer[GPS_RX_BUFFER_SIZE];
 
 static char gps_line_buffer[GPS_LINE_BUFFER_SIZE];
 static uint16_t gps_line_index = 0U;
+static uint8_t gps_in_ascii_sentence = 0U;
 
 volatile GPS_Data_t gps_data = {0};
 volatile uint32_t gps_rx_count = 0U;
@@ -22,6 +23,58 @@ volatile uint32_t gps_sentence_count = 0U;
 volatile uint32_t gps_rmc_count = 0U;
 volatile uint32_t gps_gga_count = 0U;
 volatile uint32_t gps_vtg_count = 0U;
+
+/* Binary-tolerant parser debug counters */
+volatile uint32_t gps_dollar_count = 0U;
+volatile uint32_t gps_ascii_sentence_count = 0U;
+volatile uint32_t gps_binary_drop_count = 0U;
+volatile uint32_t gps_nonascii_sentence_drop_count = 0U;
+volatile uint32_t gps_line_overflow_count = 0U;
+
+/* PQTMTAR / moving-base heading debug */
+volatile uint32_t gps_pqtmtar_count = 0U;
+volatile uint8_t gps_pqtmtar_status = 0U;
+volatile float gps_pqtmtar_heading_deg = 0.0f;
+volatile float gps_pqtmtar_pitch_deg = 0.0f;
+volatile float gps_pqtmtar_roll_deg = 0.0f;
+volatile float gps_pqtmtar_baseline_m = 0.0f;
+volatile uint8_t gps_pqtmtar_msgver = 0U;
+volatile float gps_pqtmtar_utc_time = 0.0f;
+volatile uint8_t gps_pqtmtar_quality = 0U;
+volatile float gps_pqtmtar_pitch_accuracy_deg = 0.0f;
+volatile float gps_pqtmtar_heading_accuracy_deg = 0.0f;
+volatile uint8_t gps_pqtmtar_used_sv = 0U;
+
+/* PQTMTAR solution-valid debug */
+volatile uint8_t gps_pqtmtar_solution_valid = 0U;
+volatile uint32_t gps_pqtmtar_valid_count = 0U;
+volatile uint32_t gps_pqtmtar_invalid_count = 0U;
+volatile uint32_t gps_pqtmtar_last_valid_ms = 0U;
+volatile uint32_t gps_pqtmtar_last_invalid_ms = 0U;
+
+/* PQTM command response debug */
+volatile char gps_last_pqtm_response[GPS_LINE_BUFFER_SIZE] = {0};
+
+volatile uint32_t gps_pqtmcfgprot_ok_count = 0U;
+volatile uint32_t gps_pqtmcfgprot_error_count = 0U;
+
+volatile uint32_t gps_pqtmcfgmsgrate_ok_count = 0U;
+volatile uint32_t gps_pqtmcfgmsgrate_error_count = 0U;
+
+volatile uint32_t gps_pqtmsavepar_ok_count = 0U;
+volatile uint32_t gps_pqtmsavepar_error_count = 0U;
+
+volatile uint32_t gps_pqtm_response_other_count = 0U;
+
+/* Raw fields for debugging until final field meanings are confirmed */
+volatile float gps_pqtmtar_f1 = 0.0f;
+volatile float gps_pqtmtar_f2 = 0.0f;
+volatile float gps_pqtmtar_f3 = 0.0f;
+volatile float gps_pqtmtar_f4 = 0.0f;
+volatile float gps_pqtmtar_f5 = 0.0f;
+volatile float gps_pqtmtar_f6 = 0.0f;
+volatile float gps_pqtmtar_f7 = 0.0f;
+volatile float gps_pqtmtar_f8 = 0.0f;
 
 static uint16_t GPS_NextIndex(uint16_t idx)
 {
@@ -184,6 +237,174 @@ static void GPS_ParseVTG(const char *sentence)
   gps_vtg_count++;
 }
 
+static void GPS_ParsePQTMTAR(const char *sentence)
+{
+  char buffer[GPS_LINE_BUFFER_SIZE];
+  char *fields[24] = {0};
+  uint32_t field_count;
+
+  snprintf(buffer, sizeof(buffer), "%s", sentence);
+  field_count = GPS_SplitFields(buffer, fields, 24U);
+
+  /*
+   * We are intentionally storing raw fields first.
+   * This avoids guessing the exact PQTMTAR field meanings incorrectly.
+   *
+   * fields[0] = "$PQTMTAR"
+   * fields[1] = first payload field
+   * fields[2] = second payload field
+   * ...
+   */
+  if (field_count < 2U)
+  {
+    return;
+  }
+
+  gps_pqtmtar_f1 = (field_count > 1U && fields[1][0] != '\0') ? (float)atof(fields[1]) : 0.0f;
+  gps_pqtmtar_f2 = (field_count > 2U && fields[2][0] != '\0') ? (float)atof(fields[2]) : 0.0f;
+  gps_pqtmtar_f3 = (field_count > 3U && fields[3][0] != '\0') ? (float)atof(fields[3]) : 0.0f;
+  gps_pqtmtar_f4 = (field_count > 4U && fields[4][0] != '\0') ? (float)atof(fields[4]) : 0.0f;
+  gps_pqtmtar_f5 = (field_count > 5U && fields[5][0] != '\0') ? (float)atof(fields[5]) : 0.0f;
+  gps_pqtmtar_f6 = (field_count > 6U && fields[6][0] != '\0') ? (float)atof(fields[6]) : 0.0f;
+  gps_pqtmtar_f7 = (field_count > 7U && fields[7][0] != '\0') ? (float)atof(fields[7]) : 0.0f;
+  gps_pqtmtar_f8 = (field_count > 8U && fields[8][0] != '\0') ? (float)atof(fields[8]) : 0.0f;
+
+  /*
+   * PQTMTAR field order:
+   * fields[0]  = "$PQTMTAR"
+   * fields[1]  = MsgVer
+   * fields[2]  = UTC time, hhmmss.sss
+   * fields[3]  = Quality
+   * fields[4]  = Res1, reserved, normally empty
+   * fields[5]  = Baseline length, meters
+   * fields[6]  = Pitch, degrees
+   * fields[7]  = Res2, reserved, normally empty
+   * fields[8]  = Heading, degrees
+   * fields[9]  = Pitch accuracy, degrees
+   * fields[10] = Res3, reserved, normally empty
+   * fields[11] = Heading accuracy, degrees
+   * fields[12] = UsedSV, may include checksum suffix like "21*59"
+   */
+
+  gps_pqtmtar_msgver =
+      (field_count > 1U && fields[1][0] != '\0') ? (uint8_t)atoi(fields[1]) : 0U;
+
+  gps_pqtmtar_utc_time =
+      (field_count > 2U && fields[2][0] != '\0') ? (float)atof(fields[2]) : 0.0f;
+
+  gps_pqtmtar_quality =
+      (field_count > 3U && fields[3][0] != '\0') ? (uint8_t)atoi(fields[3]) : 0U;
+
+  /* Keep old name as alias for now so existing Live Expressions still work. */
+  gps_pqtmtar_status = gps_pqtmtar_quality;
+
+  gps_pqtmtar_baseline_m =
+      (field_count > 5U && fields[5][0] != '\0') ? (float)atof(fields[5]) : 0.0f;
+
+  gps_pqtmtar_pitch_deg =
+      (field_count > 6U && fields[6][0] != '\0') ? (float)atof(fields[6]) : 0.0f;
+
+  gps_pqtmtar_roll_deg = 0.0f;
+
+  gps_pqtmtar_heading_deg =
+      (field_count > 8U && fields[8][0] != '\0') ? (float)atof(fields[8]) : 0.0f;
+
+  gps_pqtmtar_pitch_accuracy_deg =
+      (field_count > 9U && fields[9][0] != '\0') ? (float)atof(fields[9]) : 0.0f;
+
+  gps_pqtmtar_heading_accuracy_deg =
+      (field_count > 11U && fields[11][0] != '\0') ? (float)atof(fields[11]) : 0.0f;
+
+  gps_pqtmtar_used_sv =
+      (field_count > 12U && fields[12][0] != '\0') ? (uint8_t)atoi(fields[12]) : 0U;
+
+  /*
+   * Treat attitude as valid only when the module reports nonzero quality and
+   * actually provides the moving-base fields. When invalid, PQTMTAR can still
+   * be emitted, but Length/Pitch/Heading/UsedSV will be empty or zero.
+   */
+  if ((gps_pqtmtar_quality != 0U) &&
+      (field_count > 8U) &&
+      (fields[5][0] != '\0') &&
+      (fields[8][0] != '\0'))
+  {
+    gps_pqtmtar_solution_valid = 1U;
+    gps_pqtmtar_valid_count++;
+    gps_pqtmtar_last_valid_ms = HAL_GetTick();
+  }
+  else
+  {
+    gps_pqtmtar_solution_valid = 0U;
+    gps_pqtmtar_invalid_count++;
+    gps_pqtmtar_last_invalid_ms = HAL_GetTick();
+  }
+
+  gps_pqtmtar_count++;
+}
+
+static void GPS_ParsePQTMResponse(const char *sentence)
+{
+  if (sentence == NULL)
+  {
+    return;
+  }
+
+  snprintf((char *)gps_last_pqtm_response,
+           GPS_LINE_BUFFER_SIZE,
+           "%s",
+           sentence);
+
+  if (strncmp(sentence, "$PQTMCFGPROT", strlen("$PQTMCFGPROT")) == 0)
+  {
+    if (strstr(sentence, ",OK") != NULL)
+    {
+      gps_pqtmcfgprot_ok_count++;
+    }
+    else if (strstr(sentence, ",ERROR") != NULL)
+    {
+      gps_pqtmcfgprot_error_count++;
+    }
+    else
+    {
+      gps_pqtm_response_other_count++;
+    }
+  }
+  else if (strncmp(sentence, "$PQTMCFGMSGRATE", strlen("$PQTMCFGMSGRATE")) == 0)
+  {
+    if (strstr(sentence, ",OK") != NULL)
+    {
+      gps_pqtmcfgmsgrate_ok_count++;
+    }
+    else if (strstr(sentence, ",ERROR") != NULL)
+    {
+      gps_pqtmcfgmsgrate_error_count++;
+    }
+    else
+    {
+      gps_pqtm_response_other_count++;
+    }
+  }
+  else if (strncmp(sentence, "$PQTMSAVEPAR", strlen("$PQTMSAVEPAR")) == 0)
+  {
+    if (strstr(sentence, ",OK") != NULL)
+    {
+      gps_pqtmsavepar_ok_count++;
+    }
+    else if (strstr(sentence, ",ERROR") != NULL)
+    {
+      gps_pqtmsavepar_error_count++;
+    }
+    else
+    {
+      gps_pqtm_response_other_count++;
+    }
+  }
+  else
+  {
+    gps_pqtm_response_other_count++;
+  }
+}
+
 static void GPS_HandleSentence(const char *sentence)
 {
   if (sentence == NULL)
@@ -203,6 +424,16 @@ static void GPS_HandleSentence(const char *sentence)
   {
     GPS_ParseVTG(sentence);
   }
+  else if (strncmp(sentence, "$PQTMTAR", strlen("$PQTMTAR")) == 0)
+  {
+    GPS_ParsePQTMTAR(sentence);
+  }
+  else if ((strncmp(sentence, "$PQTMCFGPROT", strlen("$PQTMCFGPROT")) == 0) ||
+           (strncmp(sentence, "$PQTMCFGMSGRATE", strlen("$PQTMCFGMSGRATE")) == 0) ||
+           (strncmp(sentence, "$PQTMSAVEPAR", strlen("$PQTMSAVEPAR")) == 0))
+  {
+    GPS_ParsePQTMResponse(sentence);
+  }
 }
 
 HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
@@ -216,10 +447,12 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   gps_rx_head = 0U;
   gps_rx_tail = 0U;
   gps_line_index = 0U;
+  gps_in_ascii_sentence = 0U;
   gps_sentence_ready = 0U;
 
   memset((void *)&gps_data, 0, sizeof(gps_data));
   memset((void *)gps_last_sentence, 0, sizeof(gps_last_sentence));
+  memset(gps_line_buffer, 0, sizeof(gps_line_buffer));
 
   gps_rx_count = 0U;
   gps_last_byte = 0U;
@@ -227,6 +460,54 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   gps_rmc_count = 0U;
   gps_gga_count = 0U;
   gps_vtg_count = 0U;
+
+  gps_dollar_count = 0U;
+  gps_ascii_sentence_count = 0U;
+  gps_binary_drop_count = 0U;
+  gps_nonascii_sentence_drop_count = 0U;
+  gps_line_overflow_count = 0U;
+
+  gps_pqtmtar_count = 0U;
+  gps_pqtmtar_status = 0U;
+  gps_pqtmtar_heading_deg = 0.0f;
+  gps_pqtmtar_pitch_deg = 0.0f;
+  gps_pqtmtar_roll_deg = 0.0f;
+  gps_pqtmtar_baseline_m = 0.0f;
+
+  gps_pqtmtar_f1 = 0.0f;
+  gps_pqtmtar_f2 = 0.0f;
+  gps_pqtmtar_f3 = 0.0f;
+  gps_pqtmtar_f4 = 0.0f;
+  gps_pqtmtar_f5 = 0.0f;
+  gps_pqtmtar_f6 = 0.0f;
+  gps_pqtmtar_f7 = 0.0f;
+  gps_pqtmtar_f8 = 0.0f;
+
+  gps_pqtmtar_msgver = 0U;
+  gps_pqtmtar_utc_time = 0.0f;
+  gps_pqtmtar_quality = 0U;
+  gps_pqtmtar_pitch_accuracy_deg = 0.0f;
+  gps_pqtmtar_heading_accuracy_deg = 0.0f;
+  gps_pqtmtar_used_sv = 0U;
+
+  gps_pqtmtar_solution_valid = 0U;
+  gps_pqtmtar_valid_count = 0U;
+  gps_pqtmtar_invalid_count = 0U;
+  gps_pqtmtar_last_valid_ms = 0U;
+  gps_pqtmtar_last_invalid_ms = 0U;
+
+  memset((void *)gps_last_pqtm_response, 0, sizeof(gps_last_pqtm_response));
+
+  gps_pqtmcfgprot_ok_count = 0U;
+  gps_pqtmcfgprot_error_count = 0U;
+
+  gps_pqtmcfgmsgrate_ok_count = 0U;
+  gps_pqtmcfgmsgrate_error_count = 0U;
+
+  gps_pqtmsavepar_ok_count = 0U;
+  gps_pqtmsavepar_error_count = 0U;
+
+  gps_pqtm_response_other_count = 0U;
 
   return HAL_OK;
 }
@@ -268,12 +549,41 @@ void GPS_Process(void)
 {
   while (gps_rx_tail != gps_rx_head)
   {
-    char c = (char)gps_rx_buffer[gps_rx_tail];
+    uint8_t b = gps_rx_buffer[gps_rx_tail];
     gps_rx_tail = GPS_NextIndex(gps_rx_tail);
 
-    if ((c == '\r') || (c == '\n'))
+    /*
+     * Binary-tolerant mode:
+     * Ignore everything until a '$' is seen.
+     * Real NMEA/PQTM ASCII sentences start with '$'.
+     */
+    if (b == (uint8_t)'$')
     {
-      if (gps_line_index > 0U)
+      gps_dollar_count++;
+
+      gps_line_index = 0U;
+      gps_line_buffer[gps_line_index++] = (char)b;
+      gps_in_ascii_sentence = 1U;
+      continue;
+    }
+
+    /*
+     * If we are not inside a '$...' sentence, this byte is binary/proprietary
+     * traffic from the current GPS2 UART path. Drop it silently.
+     */
+    if (gps_in_ascii_sentence == 0U)
+    {
+      gps_binary_drop_count++;
+      continue;
+    }
+
+    /*
+     * End of ASCII sentence. Accept CR or LF. This handles both "\r\n" and
+     * "\n" line endings.
+     */
+    if ((b == (uint8_t)'\r') || (b == (uint8_t)'\n'))
+    {
+      if (gps_line_index > 1U)
       {
         gps_line_buffer[gps_line_index] = '\0';
 
@@ -284,22 +594,39 @@ void GPS_Process(void)
 
         gps_sentence_ready = 1U;
         gps_sentence_count++;
-        gps_line_index = 0U;
+        gps_ascii_sentence_count++;
 
         GPS_HandleSentence((const char *)gps_last_sentence);
+
         gps_sentence_ready = 0U;
       }
+
+      gps_line_index = 0U;
+      gps_in_ascii_sentence = 0U;
+      continue;
+    }
+
+    /*
+     * Inside a '$...' sentence, only allow printable ASCII.
+     * If binary appears after '$', discard that candidate sentence.
+     */
+    if ((b < 0x20U) || (b > 0x7EU))
+    {
+      gps_nonascii_sentence_drop_count++;
+      gps_line_index = 0U;
+      gps_in_ascii_sentence = 0U;
+      continue;
+    }
+
+    if (gps_line_index < (GPS_LINE_BUFFER_SIZE - 1U))
+    {
+      gps_line_buffer[gps_line_index++] = (char)b;
     }
     else
     {
-      if (gps_line_index < (GPS_LINE_BUFFER_SIZE - 1U))
-      {
-        gps_line_buffer[gps_line_index++] = c;
-      }
-      else
-      {
-        gps_line_index = 0U;
-      }
+      gps_line_overflow_count++;
+      gps_line_index = 0U;
+      gps_in_ascii_sentence = 0U;
     }
   }
 }

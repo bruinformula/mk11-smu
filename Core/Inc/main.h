@@ -59,10 +59,24 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define IMU_CS_Pin GPIO_PIN_4
 #define IMU_CS_GPIO_Port GPIOA
-#define GPS_MODE_Pin GPIO_PIN_1
-#define GPS_MODE_GPIO_Port GPIOB
-#define GPS_1PPS_Pin GPIO_PIN_10
-#define GPS_1PPS_GPIO_Port GPIOA
+#define GPS1_ANT_ON_Pin GPIO_PIN_0
+#define GPS1_ANT_ON_GPIO_Port GPIOB
+#define GPS1_RST_Pin GPIO_PIN_1
+#define GPS1_RST_GPIO_Port GPIOB
+#define GPS1_1PPS_Pin GPIO_PIN_2
+#define GPS1_1PPS_GPIO_Port GPIOB
+#define GPS2_UART_RX_Pin GPIO_PIN_11
+#define GPS2_UART_RX_GPIO_Port GPIOB
+#define GPS2_ANT_ON_Pin GPIO_PIN_12
+#define GPS2_ANT_ON_GPIO_Port GPIOB
+#define GPS2_RST_Pin GPIO_PIN_11
+#define GPS2_RST_GPIO_Port GPIOA
+#define GPS2_1PPS_Pin GPIO_PIN_12
+#define GPS2_1PPS_GPIO_Port GPIOA
+#define GPS2_WKUP_Pin GPIO_PIN_15
+#define GPS2_WKUP_GPIO_Port GPIOA
+#define GPS1_WKUP_Pin GPIO_PIN_5
+#define GPS1_WKUP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
