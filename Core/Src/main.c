@@ -189,10 +189,10 @@ int main(void)
 	/* Step 3: Program rover UART baud and enable NMEA messages */
 
 
-	static const char rover_baud_cmd[] = "$PQTMCFGUART,W,460800*13\r\n";
+//	static const char rover_baud_cmd[] = "$PQTMCFGUART,W,460800*13\r\n";
 
-	//    static const char rover_baud_cmd[] = "$PAIR864,0,0,460800*16\r\n";
-	//    static const char rover_baud_cmd[] = "$PAIR864,0,0,921600*10\r\n";
+//	    static const char rover_baud_cmd[] = "$PAIR864,0,0,460800*16\r\n";
+	    static const char rover_baud_cmd[] = "$PAIR864,0,0,921600*10\r\n";
 	static const char rover_gga_cmd[]  = "$PAIR062,0,1*3F\r\n";
 	static const char rover_rmc_cmd[]  = "$PAIR062,4,1*3B\r\n";
 
@@ -236,18 +236,18 @@ int main(void)
 //	HAL_Delay(1000U);
 
 	/* 3a: Send baud-change command at factory baud (460800) */
-//			for (i = 0U; i < 5U; i++)
-//			{
-//				HAL_UART_Transmit(&huart1, (uint8_t *)rover_baud_cmd,
-//						(uint16_t)(sizeof(rover_baud_cmd) - 1U), 100U);
-//				HAL_Delay(1000U);
-//			}
+			for (i = 0U; i < 5U; i++)
+			{
+				HAL_UART_Transmit(&huart1, (uint8_t *)rover_baud_cmd,
+						(uint16_t)(sizeof(rover_baud_cmd) - 1U), 100U);
+				HAL_Delay(1000U);
+			}
+			huart3.Init.BaudRate = 921600U;
+
+			HAL_UART_Transmit(&huart1, (uint8_t *)rover_save_cmd,
+					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
+			HAL_Delay(1000U);
 //
-//			HAL_UART_Transmit(&huart1, (uint8_t *)rover_save_cmd,
-//					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//
-//			huart3.Init.BaudRate = 460800U;
 //			(void)HAL_UART_Init(&huart1);
 //			/* 3a: Send baud-change command at factory baud (460800) */
 //			for (i = 0U; i < 5U; i++)
@@ -676,7 +676,7 @@ static void MX_USART3_UART_Init(void)
 
   /* USER CODE END USART3_Init 1 */
   huart3.Instance = USART3;
-  huart3.Init.BaudRate = 460800;
+  huart3.Init.BaudRate = 921600;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
   huart3.Init.Parity = UART_PARITY_NONE;
