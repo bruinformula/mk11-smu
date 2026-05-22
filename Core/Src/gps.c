@@ -17,6 +17,7 @@
 #define GPS_COMMAND_RETRY_MS        1000U
 #define GPS_BASE_RX_GPIO_PORT        GPIOB
 #define GPS_BASE_RX_PIN              GPIO_PIN_11
+#define GPS_DEBUG                    1U
 
 typedef enum
 {
@@ -45,7 +46,9 @@ extern UART_HandleTypeDef huart2;
 
 static void GPS_HandleSentence(const char *sentence);
 static void GPS_ProcessPendingBytes(void);
-static void GPS_DebugMirrorSentence(const char *sentence);
+static void GPS_MirrorCommandToUart2(const char *command);
+static void GPS_MirrorSentenceToUart2(const char *sentence);
+static void GPS_MirrorDataCsvToUart2(void);
 
 static void GPS_AllowImmediateRetry(void)
 {
@@ -134,19 +137,7 @@ static HAL_StatusTypeDef GPS_SendCommand(const char *command)
     return HAL_ERROR;
   }
 
-  /* Echo to debug UART: "TX> " + exact bytes going to GPS, in one transmit */
-  {
-    uint16_t cmd_len = (uint16_t)strlen(command);
-    uint8_t echo_buf[72];
-    uint16_t echo_len = (uint16_t)(4U + cmd_len);
-    if (echo_len > sizeof(echo_buf))
-    {
-      echo_len = (uint16_t)sizeof(echo_buf);
-    }
-    memcpy(echo_buf, "TX> ", 4U);
-    memcpy(echo_buf + 4U, command, echo_len - 4U);
-    HAL_UART_Transmit(&huart2, echo_buf, echo_len, 20U);
-  }
+  GPS_MirrorCommandToUart2(command);
 
   status = HAL_UART_Transmit(gps_uart,
                              (uint8_t *)command,
@@ -161,8 +152,37 @@ static HAL_StatusTypeDef GPS_SendCommand(const char *command)
   return status;
 }
 
-static void GPS_DebugMirrorSentence(const char *sentence)
+static void GPS_MirrorCommandToUart2(const char *command)
 {
+#if GPS_DEBUG
+  uint16_t command_len;
+  uint8_t echo_buf[72];
+  uint16_t echo_len;
+
+  if ((command == NULL) || (command[0] == '\0'))
+  {
+    return;
+  }
+
+  command_len = (uint16_t)strlen(command);
+  echo_len = (uint16_t)(4U + command_len);
+
+  if (echo_len > sizeof(echo_buf))
+  {
+    echo_len = (uint16_t)sizeof(echo_buf);
+  }
+
+  memcpy(echo_buf, "TX> ", 4U);
+  memcpy(echo_buf + 4U, command, echo_len - 4U);
+  (void)HAL_UART_Transmit(&huart2, echo_buf, echo_len, 20U);
+#else
+  (void)command;
+#endif
+}
+
+static void GPS_MirrorSentenceToUart2(const char *sentence)
+{
+#if GPS_DEBUG
   uint16_t sentence_len;
 
   if ((sentence == NULL) || (sentence[0] == '\0'))
@@ -174,6 +194,43 @@ static void GPS_DebugMirrorSentence(const char *sentence)
 
   (void)HAL_UART_Transmit(&huart2, (uint8_t *)sentence, sentence_len, 20U);
   (void)HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2U, 20U);
+#else
+  (void)sentence;
+#endif
+}
+
+static void GPS_MirrorDataCsvToUart2(void)
+{
+#if !GPS_DEBUG
+  char csv_buf[192];
+  int csv_len;
+
+  csv_len = snprintf(csv_buf,
+                     sizeof(csv_buf),
+                     "%s,%s,%u,%u,%u,%.7f,%.7f,%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+                     (const char *)gps_data.utc_time,
+                     (const char *)gps_data.utc_date,
+                     (unsigned int)gps_data.fix_valid,
+                     (unsigned int)gps_data.fix_quality,
+                     (unsigned int)gps_data.satellites,
+                     (double)gps_data.latitude_deg,
+                     (double)gps_data.longitude_deg,
+                     (double)gps_data.speed_knots,
+                     (double)gps_data.speed_kph,
+                     (double)gps_data.course_deg,
+                     (unsigned int)gps_data.heading_valid,
+                     (unsigned int)gps_data.heading_quality,
+                     (double)gps_data.heading_deg,
+                     (double)gps_data.heading_accuracy_deg,
+                     (double)gps_data.baseline_length_m,
+                     (double)gps_data.pitch_deg,
+                     (double)gps_data.altitude_m);
+
+  if ((csv_len > 0) && ((size_t)csv_len < sizeof(csv_buf)))
+  {
+    (void)HAL_UART_Transmit(&huart2, (uint8_t *)csv_buf, (uint16_t)csv_len, 20U);
+  }
+#endif
 }
 
 static void GPS_PushByte(uint8_t byte)
@@ -714,7 +771,8 @@ static void GPS_ProcessPendingBytes(void)
         gps_line_index = 0U;
 
         GPS_HandleSentence((const char *)gps_diag.last_sentence);
-        GPS_DebugMirrorSentence((const char *)gps_diag.last_sentence);
+        GPS_MirrorSentenceToUart2((const char *)gps_diag.last_sentence);
+        GPS_MirrorDataCsvToUart2();
         gps_diag.sentence_ready = 0U;
       }
     }
