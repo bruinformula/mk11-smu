@@ -1,5 +1,6 @@
-Core/Src/state.o: ../Core/Src/state.c ../Core/Inc/state.h \
- ../Core/Inc/main.h ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal.h \
+Core/Src/sensorfusion.o: ../Core/Src/sensorfusion.c \
+ ../Core/Inc/sensorfusion.h ../Core/Inc/main.h \
+ ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal.h \
  ../Core/Inc/stm32l5xx_hal_conf.h \
  ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_rcc.h \
  ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_def.h \
@@ -32,8 +33,8 @@ Core/Src/state.o: ../Core/Src/state.c ../Core/Inc/state.h \
  ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_spi_ex.h \
  ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_uart.h \
  ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_uart_ex.h \
- ../Core/Inc/gps.h ../Core/Inc/sensorfusion.h
-../Core/Inc/state.h:
+ ../Core/Inc/gps.h ../Core/Inc/state.h
+../Core/Inc/sensorfusion.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal.h:
 ../Core/Inc/stm32l5xx_hal_conf.h:
@@ -69,4 +70,4 @@ Core/Src/state.o: ../Core/Src/state.c ../Core/Inc/state.h \
 ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_uart.h:
 ../Drivers/STM32L5xx_HAL_Driver/Inc/stm32l5xx_hal_uart_ex.h:
 ../Core/Inc/gps.h:
-../Core/Inc/sensorfusion.h:
+../Core/Inc/state.h:

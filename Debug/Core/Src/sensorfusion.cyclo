@@ -1,0 +1,13 @@
+../Core/Src/sensorfusion.c:44:13:SensorFusion_ResetCovariance	3
+../Core/Src/sensorfusion.c:61:13:SensorFusion_SymmetrizeCovariance	3
+../Core/Src/sensorfusion.c:77:13:SensorFusion_LatLonToLocal	1
+../Core/Src/sensorfusion.c:87:13:SensorFusion_LocalToLatLon	1
+../Core/Src/sensorfusion.c:100:13:SensorFusion_SetVelocityFromGps	2
+../Core/Src/sensorfusion.c:118:13:SensorFusion_SetReferenceFromGps	2
+../Core/Src/sensorfusion.c:136:14:SensorFusion_GetGpsPositionVariance	4
+../Core/Src/sensorfusion.c:154:13:SensorFusion_Predict	7
+../Core/Src/sensorfusion.c:217:13:SensorFusion_UpdatePosition	6
+../Core/Src/sensorfusion.c:270:13:SensorFusion_UpdateVelocity	6
+../Core/Src/sensorfusion.c:323:13:SensorFusion_UpdateOutputs	2
+../Core/Src/sensorfusion.c:356:19:SensorFusion_Init	1
+../Core/Src/sensorfusion.c:378:6:SensorFusion_Update	14
