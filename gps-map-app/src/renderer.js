@@ -4,8 +4,11 @@ const KPH_TO_MPH = 0.621371;
 const KNOTS_TO_MPH = 1.150779;
 const MPS_TO_MPH = 2.236936;
 const ACCEL_COLOR_PERCENTILE = 0.95;
+const LAP_DETECTION_RADIUS_METERS = 1;
+const DIVIDER_SNAP_MAX_DISTANCE_METERS = 25;
 const speedHeatColors = ['#1e3a8a', '#2563eb', '#0ea5a4', '#4ade80', '#facc15', '#fb923c', '#dc2626'];
 const qualityColors = ['#7f1d1d', '#b91c1c', '#ea580c', '#eab308', '#84cc16', '#16a34a'];
+const sectorDividerColors = ['#f16839', '#0a8f7b', '#2563eb', '#eab308', '#ef4444', '#7c3aed', '#0f766e', '#fb923c'];
 const visualizationOrder = ['speedAccel', 'lockQuality', 'snr', 'satelliteCount'];
 
 const TRACK_SOURCE_ID = 'track-source';
@@ -13,6 +16,7 @@ const BARS_SOURCE_ID = 'bars-source';
 const HITS_SOURCE_ID = 'hits-source';
 const MARKERS_SOURCE_ID = 'markers-source';
 const SELECTED_SOURCE_ID = 'selected-source';
+const LAP_CROSSINGS_SOURCE_ID = 'lap-crossings-source';
 const TERRAIN_SOURCE_ID = 'terrain-source';
 
 const TRACK_GLOW_LAYER_ID = 'track-glow-layer';
@@ -22,6 +26,7 @@ const SPEED_HEATMAP_LAYER_ID = 'speed-heatmap-layer';
 const HITS_LAYER_ID = 'hits-layer';
 const MARKERS_LAYER_ID = 'markers-layer';
 const SELECTED_LAYER_ID = 'selected-layer';
+const LAP_CROSSINGS_LAYER_ID = 'lap-crossings-layer';
 
 const MAP_3D_PITCH = 62;
 const MAP_3D_BEARING = -24;
@@ -33,6 +38,11 @@ const elements = {
   selectedFile: document.getElementById('selected-file'),
   exportGeoJsonButton: document.getElementById('export-geojson-button'),
   exportKmlButton: document.getElementById('export-kml-button'),
+  analysisTabButtons: Array.from(document.querySelectorAll('.sidebar-tab')),
+  analysisTabMap: document.getElementById('analysis-tab-map'),
+  analysisTabLap: document.getElementById('analysis-tab-lap'),
+  sidebarPaneMap: document.getElementById('sidebar-pane-map'),
+  sidebarPaneLap: document.getElementById('sidebar-pane-lap'),
   fixCount: document.getElementById('fix-count'),
   distanceKm: document.getElementById('distance-km'),
   sentenceCount: document.getElementById('sentence-count'),
@@ -56,6 +66,11 @@ const elements = {
   speedLegendMax: document.getElementById('speed-legend-max'),
   barSizeRange: document.getElementById('bar-size-range'),
   barSizeValue: document.getElementById('bar-size-value'),
+  lapSectorCount: document.getElementById('lap-sector-count'),
+  lapDividerList: document.getElementById('lap-divider-list'),
+  lapAnalysisChip: document.getElementById('lap-analysis-chip'),
+  lapSectorSummary: document.getElementById('lap-sector-summary'),
+  lapSectorTable: document.getElementById('lap-sector-table'),
   visualizationInputs: Array.from(document.querySelectorAll('.visualization-option input')),
   pointDetailOverlay: document.getElementById('point-detail-overlay'),
   pointDetailClose: document.getElementById('point-detail-close'),
@@ -108,11 +123,21 @@ const overlayDefinitions = {
 
 const state = {
   busy: false,
+  activeTab: 'map',
   mapReady: false,
   currentFilePath: null,
   currentReport: null,
   selectedPointIndex: null,
   barSizeScale: 1,
+  lapAnalysis: {
+    sectorCount: 3,
+    activeDividerIndex: 0,
+    detectionRadiusMeters: LAP_DETECTION_RADIUS_METERS,
+    dividerPins: Array.from({ length: 3 }, () => null),
+    dividerMarkers: [],
+    trackSamples: [],
+    analysis: null,
+  },
   metricRanges: null,
   activeVisualizations: new Set(
     elements.visualizationInputs.filter((input) => input.checked).map((input) => input.value),
@@ -256,6 +281,79 @@ function formatCoordinatePair(point) {
     return '--';
   }
   return `${formatNumber(point.latitude, 6)}, ${formatNumber(point.longitude, 6)}`;
+}
+
+function formatSeconds(value, digits = 3) {
+  if (!finiteNumber(value)) {
+    return '--';
+  }
+  return `${formatNumber(value, digits)} s`;
+}
+
+function formatDistanceMeters(value) {
+  if (!finiteNumber(value)) {
+    return '--';
+  }
+  if (value >= 1000) {
+    return `${formatNumber(value / 1000, 3)} km`;
+  }
+  return `${formatNumber(value, 1)} m`;
+}
+
+function timestampToDate(timestamp) {
+  if (!timestamp) {
+    return null;
+  }
+
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function haversineDistanceMeters(latitudeA, longitudeA, latitudeB, longitudeB) {
+  const earthRadiusMeters = 6371000;
+  const latitudeARadians = latitudeA * (Math.PI / 180);
+  const latitudeBRadians = latitudeB * (Math.PI / 180);
+  const deltaLatitudeRadians = (latitudeB - latitudeA) * (Math.PI / 180);
+  const deltaLongitudeRadians = (longitudeB - longitudeA) * (Math.PI / 180);
+
+  const haversine = (
+    (Math.sin(deltaLatitudeRadians / 2) ** 2)
+    + (Math.cos(latitudeARadians) * Math.cos(latitudeBRadians) * (Math.sin(deltaLongitudeRadians / 2) ** 2))
+  );
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function buildTrackSamples(points) {
+  const samples = [];
+  let cumulativeDistanceMeters = 0;
+  const startDate = timestampToDate(points[0]?.timestamp);
+
+  for (const [pointIndex, point] of points.entries()) {
+    if (pointIndex > 0) {
+      const previousPoint = points[pointIndex - 1];
+      cumulativeDistanceMeters += haversineDistanceMeters(
+        previousPoint.latitude,
+        previousPoint.longitude,
+        point.latitude,
+        point.longitude,
+      );
+    }
+
+    const pointDate = timestampToDate(point.timestamp);
+    samples.push({
+      pointIndex,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      timestamp: point.timestamp,
+      elapsedSeconds: startDate && pointDate
+        ? (pointDate.getTime() - startDate.getTime()) / 1000
+        : null,
+      cumulativeDistanceMeters,
+    });
+  }
+
+  return samples;
 }
 
 function speedMph(point) {
@@ -415,6 +513,632 @@ function setSourceData(sourceId, data) {
   }
 }
 
+function dividerColor(index) {
+  return sectorDividerColors[index % sectorDividerColors.length];
+}
+
+function countPinnedDividers() {
+  return state.lapAnalysis.dividerPins.filter(Boolean).length;
+}
+
+function nextUnpinnedDividerIndex(currentIndex) {
+  const { dividerPins } = state.lapAnalysis;
+
+  for (let offset = 1; offset <= dividerPins.length; offset += 1) {
+    const candidateIndex = (currentIndex + offset) % dividerPins.length;
+    if (!dividerPins[candidateIndex]) {
+      return candidateIndex;
+    }
+  }
+
+  return null;
+}
+
+function resizeDividerPins(nextCount) {
+  const resizedPins = state.lapAnalysis.dividerPins.slice(0, nextCount);
+  while (resizedPins.length < nextCount) {
+    resizedPins.push(null);
+  }
+
+  state.lapAnalysis.sectorCount = nextCount;
+  state.lapAnalysis.dividerPins = resizedPins;
+
+  if (
+    Number.isInteger(state.lapAnalysis.activeDividerIndex)
+    && state.lapAnalysis.activeDividerIndex >= nextCount
+  ) {
+    state.lapAnalysis.activeDividerIndex = nextCount - 1;
+  }
+
+  if (!Number.isInteger(state.lapAnalysis.activeDividerIndex)) {
+    state.lapAnalysis.activeDividerIndex = nextCount ? 0 : null;
+  }
+}
+
+function buildLapCrossingsForPin(pin, dividerIndex, radiusMeters) {
+  const crossings = [];
+  let crossingRun = [];
+
+  const flushCrossingRun = () => {
+    if (!crossingRun.length) {
+      return;
+    }
+
+    const nearestSample = crossingRun.reduce((bestSample, candidateSample) => (
+      candidateSample.distanceMeters < bestSample.distanceMeters ? candidateSample : bestSample
+    ));
+
+    crossings.push({
+      dividerIndex,
+      pointIndex: nearestSample.pointIndex,
+      latitude: nearestSample.latitude,
+      longitude: nearestSample.longitude,
+      timestamp: nearestSample.timestamp,
+      elapsedSeconds: nearestSample.elapsedSeconds,
+      cumulativeDistanceMeters: nearestSample.cumulativeDistanceMeters,
+      distanceMeters: nearestSample.distanceMeters,
+    });
+
+    crossingRun = [];
+  };
+
+  for (const sample of state.lapAnalysis.trackSamples) {
+    const distanceMeters = haversineDistanceMeters(
+      pin.latitude,
+      pin.longitude,
+      sample.latitude,
+      sample.longitude,
+    );
+
+    if (distanceMeters <= radiusMeters) {
+      crossingRun.push({
+        ...sample,
+        distanceMeters,
+      });
+    } else {
+      flushCrossingRun();
+    }
+  }
+
+  flushCrossingRun();
+  return crossings;
+}
+
+function analyzeLapTrack() {
+  const dividerSummaries = state.lapAnalysis.dividerPins.map((pin, dividerIndex) => {
+    if (!pin) {
+      return {
+        dividerIndex,
+        pin: null,
+        crossings: [],
+      };
+    }
+
+    return {
+      dividerIndex,
+      pin,
+      crossings: buildLapCrossingsForPin(
+        pin,
+        dividerIndex,
+        state.lapAnalysis.detectionRadiusMeters,
+      ),
+    };
+  });
+
+  const orderedDividerIndexes = dividerSummaries
+    .filter((summary) => summary.pin && summary.crossings.length)
+    .sort((leftSummary, rightSummary) => leftSummary.crossings[0].pointIndex - rightSummary.crossings[0].pointIndex)
+    .map((summary) => summary.dividerIndex);
+
+  const crossings = dividerSummaries
+    .flatMap((summary) => summary.crossings)
+    .sort((leftCrossing, rightCrossing) => leftCrossing.pointIndex - rightCrossing.pointIndex);
+
+  const pinnedCount = countPinnedDividers();
+  const ready = (
+    pinnedCount === state.lapAnalysis.sectorCount
+    && orderedDividerIndexes.length === state.lapAnalysis.sectorCount
+  );
+
+  const sectorStats = [];
+  let totalSegments = 0;
+
+  if (ready) {
+    const dividerOrder = new Map(
+      orderedDividerIndexes.map((dividerIndex, orderIndex) => [dividerIndex, orderIndex]),
+    );
+
+    const sectorBuilders = orderedDividerIndexes.map((dividerIndex, orderIndex) => ({
+      sectorNumber: orderIndex + 1,
+      startDividerIndex: dividerIndex,
+      endDividerIndex: orderedDividerIndexes[(orderIndex + 1) % orderedDividerIndexes.length],
+      segments: [],
+    }));
+
+    for (let crossingIndex = 0; crossingIndex < crossings.length - 1; crossingIndex += 1) {
+      const startCrossing = crossings[crossingIndex];
+      const endCrossing = crossings[crossingIndex + 1];
+      const startOrder = dividerOrder.get(startCrossing.dividerIndex);
+      const endOrder = dividerOrder.get(endCrossing.dividerIndex);
+
+      if (!Number.isInteger(startOrder) || !Number.isInteger(endOrder)) {
+        continue;
+      }
+
+      const expectedNextOrder = orderedDividerIndexes.length === 1
+        ? startOrder
+        : ((startOrder + 1) % orderedDividerIndexes.length);
+      if (endOrder !== expectedNextOrder) {
+        continue;
+      }
+
+      sectorBuilders[startOrder].segments.push({
+        startPointIndex: startCrossing.pointIndex,
+        endPointIndex: endCrossing.pointIndex,
+        timeSeconds: (
+          finiteNumber(startCrossing.elapsedSeconds)
+          && finiteNumber(endCrossing.elapsedSeconds)
+        )
+          ? endCrossing.elapsedSeconds - startCrossing.elapsedSeconds
+          : null,
+        distanceMeters: (
+          finiteNumber(startCrossing.cumulativeDistanceMeters)
+          && finiteNumber(endCrossing.cumulativeDistanceMeters)
+        )
+          ? endCrossing.cumulativeDistanceMeters - startCrossing.cumulativeDistanceMeters
+          : null,
+      });
+    }
+
+    for (const sectorBuilder of sectorBuilders) {
+      const validTimes = sectorBuilder.segments
+        .map((segment) => segment.timeSeconds)
+        .filter(finiteNumber);
+      const validDistances = sectorBuilder.segments
+        .map((segment) => segment.distanceMeters)
+        .filter(finiteNumber);
+      totalSegments += sectorBuilder.segments.length;
+
+      sectorStats.push({
+        sectorNumber: sectorBuilder.sectorNumber,
+        startDividerIndex: sectorBuilder.startDividerIndex,
+        endDividerIndex: sectorBuilder.endDividerIndex,
+        segmentsCount: sectorBuilder.segments.length,
+        bestTimeSeconds: validTimes.length ? Math.min(...validTimes) : null,
+        averageTimeSeconds: validTimes.length
+          ? validTimes.reduce((sum, value) => sum + value, 0) / validTimes.length
+          : null,
+        latestTimeSeconds: validTimes.length ? validTimes[validTimes.length - 1] : null,
+        averageDistanceMeters: validDistances.length
+          ? validDistances.reduce((sum, value) => sum + value, 0) / validDistances.length
+          : null,
+      });
+    }
+  }
+
+  return {
+    dividerSummaries,
+    orderedDividerIndexes,
+    crossings,
+    pinnedCount,
+    ready,
+    sectorStats,
+    totalSegments,
+    lapCount: ready && state.lapAnalysis.sectorCount > 0
+      ? Math.floor(totalSegments / state.lapAnalysis.sectorCount)
+      : 0,
+  };
+}
+
+function buildLapCrossingFeatureCollection() {
+  if (
+    state.activeTab !== 'lapAnalysis'
+    || !state.currentReport
+    || !state.lapAnalysis.analysis?.crossings.length
+  ) {
+    return featureCollection();
+  }
+
+  return featureCollection(
+    state.lapAnalysis.analysis.crossings.map((crossing) => ({
+      type: 'Feature',
+      properties: {
+        dividerIndex: crossing.dividerIndex,
+        color: dividerColor(crossing.dividerIndex),
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: [crossing.longitude, crossing.latitude],
+      },
+    })),
+  );
+}
+
+function removeDividerMarkers() {
+  for (const marker of state.lapAnalysis.dividerMarkers) {
+    marker.remove();
+  }
+  state.lapAnalysis.dividerMarkers = [];
+}
+
+function updateDividerMarkers() {
+  removeDividerMarkers();
+
+  if (!state.mapReady || !state.currentReport || state.activeTab !== 'lapAnalysis') {
+    return;
+  }
+
+  state.lapAnalysis.dividerPins.forEach((pin, dividerIndex) => {
+    if (!pin) {
+      return;
+    }
+
+    const markerElement = document.createElement('button');
+    markerElement.type = 'button';
+    markerElement.className = 'sector-pin-marker';
+    markerElement.textContent = `${dividerIndex + 1}`;
+    markerElement.style.setProperty('--pin-color', dividerColor(dividerIndex));
+    if (state.lapAnalysis.activeDividerIndex === dividerIndex) {
+      markerElement.classList.add('is-active');
+    }
+    markerElement.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.lapAnalysis.activeDividerIndex = dividerIndex;
+      renderLapAnalysis();
+      updateDividerMarkers();
+    });
+
+    const marker = new maplibregl.Marker({
+      element: markerElement,
+      draggable: true,
+      anchor: 'center',
+    })
+      .setLngLat([pin.longitude, pin.latitude])
+      .addTo(map);
+
+    marker.on('dragend', () => {
+      const markerPosition = marker.getLngLat();
+      setDividerPin(
+        dividerIndex,
+        {
+          latitude: markerPosition.lat,
+          longitude: markerPosition.lng,
+        },
+        {
+          advance: false,
+          statusMessage: `Moved divider ${dividerIndex + 1}.`,
+        },
+      );
+    });
+
+    state.lapAnalysis.dividerMarkers.push(marker);
+  });
+}
+
+function renderTabState() {
+  const showingMapTab = state.activeTab === 'map';
+
+  elements.sidebarPaneMap.hidden = !showingMapTab;
+  elements.sidebarPaneLap.hidden = showingMapTab;
+  elements.analysisTabMap.classList.toggle('is-active', showingMapTab);
+  elements.analysisTabLap.classList.toggle('is-active', !showingMapTab);
+  elements.analysisTabMap.setAttribute('aria-selected', `${showingMapTab}`);
+  elements.analysisTabLap.setAttribute('aria-selected', `${!showingMapTab}`);
+
+  if (!showingMapTab) {
+    closePointDetail();
+  }
+}
+
+function renderLapDividerList() {
+  const analysis = state.lapAnalysis.analysis;
+
+  elements.lapDividerList.innerHTML = state.lapAnalysis.dividerPins
+    .map((pin, dividerIndex) => {
+      const dividerSummary = analysis?.dividerSummaries?.[dividerIndex];
+      const crossingsCount = dividerSummary?.crossings.length ?? 0;
+      const isArmed = state.lapAnalysis.activeDividerIndex === dividerIndex;
+      const placementText = pin
+        ? `${formatNumber(pin.latitude, 6)}, ${formatNumber(pin.longitude, 6)}`
+        : 'Not pinned yet.';
+      const statusText = pin
+        ? `${placementText} • ${formatNumber(crossingsCount)} detected crossings`
+        : 'Arm this divider and click the map near the track to place it.';
+      const actionText = isArmed
+        ? 'Click map to place'
+        : (pin ? 'Reposition on map' : 'Place on map');
+
+      return `
+        <article class="lap-divider-item${isArmed ? ' is-armed' : ''}" style="--divider-color: ${dividerColor(dividerIndex)};">
+          <div class="lap-divider-row">
+            <div class="lap-divider-title">
+              <span class="lap-divider-swatch"></span>
+              <strong>Divider ${dividerIndex + 1}</strong>
+            </div>
+            <span class="chip muted">${formatNumber(crossingsCount)} hits</span>
+          </div>
+          <p class="lap-divider-meta">${escapeHtml(statusText)}</p>
+          <div class="lap-divider-actions">
+            <button
+              type="button"
+              class="lap-divider-button${isArmed ? ' is-armed' : ''}"
+              data-action="arm-divider"
+              data-divider-index="${dividerIndex}"
+              ${state.currentReport ? '' : 'disabled'}
+            >
+              ${escapeHtml(actionText)}
+            </button>
+            <button
+              type="button"
+              class="lap-divider-button"
+              data-action="clear-divider"
+              data-divider-index="${dividerIndex}"
+              ${pin ? '' : 'disabled'}
+            >
+              Clear
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderLapAnalysisResults() {
+  const analysis = state.lapAnalysis.analysis;
+  const pinnedCount = analysis?.pinnedCount ?? countPinnedDividers();
+  elements.lapSectorCount.value = `${state.lapAnalysis.sectorCount}`;
+  elements.lapSectorCount.disabled = !state.currentReport;
+
+  if (!state.currentReport) {
+    elements.lapAnalysisChip.textContent = 'No data';
+    elements.lapSectorSummary.innerHTML = `
+      <article class="lap-empty-state">
+        Load a parsed GNSS track to start pinning sector dividers.
+      </article>
+    `;
+    elements.lapSectorTable.innerHTML = '';
+    return;
+  }
+
+  const summaryCards = [
+    {
+      label: 'Pinned dividers',
+      value: `${pinnedCount}/${state.lapAnalysis.sectorCount}`,
+    },
+    {
+      label: 'Detected crossings',
+      value: formatNumber(analysis?.crossings.length ?? 0),
+    },
+    {
+      label: 'Ready sectors',
+      value: analysis?.ready ? formatNumber(analysis.sectorStats.length) : '--',
+    },
+    {
+      label: 'Estimated laps',
+      value: analysis?.ready ? formatNumber(analysis.lapCount) : '--',
+    },
+  ];
+
+  elements.lapSectorSummary.innerHTML = summaryCards
+    .map(
+      (card) => `
+        <article class="lap-summary-card">
+          <span>${escapeHtml(card.label)}</span>
+          <strong>${escapeHtml(card.value)}</strong>
+        </article>
+      `,
+    )
+    .join('');
+
+  if (!analysis) {
+    elements.lapAnalysisChip.textContent = 'No data';
+    elements.lapSectorTable.innerHTML = '';
+    return;
+  }
+
+  const missingPins = state.lapAnalysis.dividerPins
+    .map((pin, dividerIndex) => (pin ? null : dividerIndex + 1))
+    .filter(Boolean);
+  const undetectedPins = analysis.dividerSummaries
+    .filter((summary) => summary.pin && summary.crossings.length === 0)
+    .map((summary) => summary.dividerIndex + 1);
+
+  if (!analysis.ready) {
+    elements.lapAnalysisChip.textContent = `${pinnedCount}/${state.lapAnalysis.sectorCount} pinned`;
+
+    let message = 'Pin each divider to start detecting sectors.';
+    if (missingPins.length) {
+      message = `Still missing divider pins: ${missingPins.join(', ')}.`;
+    } else if (undetectedPins.length) {
+      message = `Pinned dividers ${undetectedPins.join(', ')} do not yet capture any fixes within +/- 1 m. Drag them onto the line or click closer to the track.`;
+    }
+
+    elements.lapSectorTable.innerHTML = `
+      <article class="lap-empty-state">
+        ${escapeHtml(message)}
+      </article>
+    `;
+    return;
+  }
+
+  elements.lapAnalysisChip.textContent = `${formatNumber(analysis.lapCount)} laps / ${formatNumber(analysis.totalSegments)} segments`;
+  elements.lapSectorTable.innerHTML = analysis.sectorStats
+    .map((sector) => {
+      const routeText = state.lapAnalysis.sectorCount === 1
+        ? 'Repeated crossings on Divider 1'
+        : `Divider ${sector.startDividerIndex + 1} -> Divider ${sector.endDividerIndex + 1}`;
+
+      return `
+        <article class="lap-sector-card" style="--divider-color: ${dividerColor(sector.startDividerIndex)};">
+          <div class="lap-sector-card-header">
+            <div class="lap-sector-title">
+              <span class="lap-sector-swatch"></span>
+              <strong>Sector ${sector.sectorNumber}</strong>
+            </div>
+            <span class="chip muted">${formatNumber(sector.segmentsCount)} runs</span>
+          </div>
+          <p class="lap-sector-route">${escapeHtml(routeText)}</p>
+          <div class="lap-sector-metrics">
+            <div class="lap-sector-metric">
+              <strong>${escapeHtml(formatSeconds(sector.bestTimeSeconds))}</strong>
+              <span>Best</span>
+            </div>
+            <div class="lap-sector-metric">
+              <strong>${escapeHtml(formatSeconds(sector.averageTimeSeconds))}</strong>
+              <span>Average</span>
+            </div>
+            <div class="lap-sector-metric">
+              <strong>${escapeHtml(formatSeconds(sector.latestTimeSeconds))}</strong>
+              <span>Latest</span>
+            </div>
+            <div class="lap-sector-metric">
+              <strong>${escapeHtml(formatDistanceMeters(sector.averageDistanceMeters))}</strong>
+              <span>Avg distance</span>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderLapAnalysis() {
+  renderTabState();
+  renderLapDividerList();
+  renderLapAnalysisResults();
+}
+
+function refreshLapCrossingsSource() {
+  const crossingData = buildLapCrossingFeatureCollection();
+  setSourceData(LAP_CROSSINGS_SOURCE_ID, crossingData);
+
+  if (state.mapReady && map.getLayer(LAP_CROSSINGS_LAYER_ID)) {
+    map.setLayoutProperty(
+      LAP_CROSSINGS_LAYER_ID,
+      'visibility',
+      state.activeTab === 'lapAnalysis' && crossingData.features.length ? 'visible' : 'none',
+    );
+  }
+}
+
+function refreshLapAnalysis() {
+  state.lapAnalysis.analysis = analyzeLapTrack();
+  renderLapAnalysis();
+  refreshLapCrossingsSource();
+  updateDividerMarkers();
+}
+
+function resetLapAnalysisForReport(report) {
+  state.lapAnalysis.trackSamples = buildTrackSamples(report.points);
+  state.lapAnalysis.dividerPins = Array.from(
+    { length: state.lapAnalysis.sectorCount },
+    () => null,
+  );
+  state.lapAnalysis.activeDividerIndex = state.lapAnalysis.sectorCount ? 0 : null;
+  state.lapAnalysis.analysis = null;
+  refreshLapAnalysis();
+}
+
+function setDividerPin(dividerIndex, pin, options = {}) {
+  state.lapAnalysis.dividerPins[dividerIndex] = {
+    latitude: pin.latitude,
+    longitude: pin.longitude,
+    pointIndex: Number.isInteger(pin.pointIndex) ? pin.pointIndex : null,
+  };
+
+  if (options.advance === false) {
+    state.lapAnalysis.activeDividerIndex = dividerIndex;
+  } else {
+    state.lapAnalysis.activeDividerIndex = nextUnpinnedDividerIndex(dividerIndex);
+  }
+
+  refreshLapAnalysis();
+  setStatus(options.statusMessage ?? `Pinned divider ${dividerIndex + 1}.`, 'Lap analysis');
+}
+
+function clearDividerPin(dividerIndex) {
+  state.lapAnalysis.dividerPins[dividerIndex] = null;
+  state.lapAnalysis.activeDividerIndex = dividerIndex;
+  refreshLapAnalysis();
+  setStatus(`Cleared divider ${dividerIndex + 1}.`, 'Lap analysis');
+}
+
+function findNearestTrackPointToLngLat(lngLat) {
+  if (!state.lapAnalysis.trackSamples.length) {
+    return null;
+  }
+
+  let nearestSample = null;
+
+  for (const sample of state.lapAnalysis.trackSamples) {
+    const distanceMeters = haversineDistanceMeters(
+      lngLat.lat,
+      lngLat.lng,
+      sample.latitude,
+      sample.longitude,
+    );
+
+    if (!nearestSample || distanceMeters < nearestSample.distanceMeters) {
+      nearestSample = {
+        pointIndex: sample.pointIndex,
+        distanceMeters,
+      };
+    }
+  }
+
+  return nearestSample;
+}
+
+function handleAnalysisTabClick(event) {
+  const nextTab = event.currentTarget.dataset.tab;
+  if (!nextTab || nextTab === state.activeTab) {
+    return;
+  }
+
+  state.activeTab = nextTab;
+  renderLapAnalysis();
+  refreshLapCrossingsSource();
+  updateDividerMarkers();
+}
+
+function handleLapDividerListClick(event) {
+  const actionButton = event.target.closest('[data-action]');
+  if (!actionButton) {
+    return;
+  }
+
+  const dividerIndex = Number(actionButton.dataset.dividerIndex);
+  if (!Number.isInteger(dividerIndex)) {
+    return;
+  }
+
+  if (actionButton.dataset.action === 'arm-divider') {
+    state.lapAnalysis.activeDividerIndex = state.lapAnalysis.activeDividerIndex === dividerIndex
+      ? null
+      : dividerIndex;
+    renderLapAnalysis();
+    updateDividerMarkers();
+    return;
+  }
+
+  if (actionButton.dataset.action === 'clear-divider') {
+    clearDividerPin(dividerIndex);
+  }
+}
+
+function handleLapSectorCountChange(event) {
+  const nextCount = Number(event.target.value);
+  if (!Number.isInteger(nextCount) || nextCount < 1) {
+    return;
+  }
+
+  resizeDividerPins(nextCount);
+  refreshLapAnalysis();
+  setStatus(`Lap analysis now expects ${nextCount} sector divider${nextCount === 1 ? '' : 's'}.`, 'Lap analysis');
+}
+
 function computeMetricRanges(points) {
   const ranges = {
     speedMaxMph: 0,
@@ -480,6 +1204,9 @@ function handleMapLoad() {
   state.mapReady = true;
   initialize3DLayers();
   applyMapPresentation();
+  renderLapAnalysis();
+  refreshLapCrossingsSource();
+  updateDividerMarkers();
   if (state.currentReport) {
     renderMap(state.currentReport);
   }
@@ -512,6 +1239,12 @@ function initialize3DLayers() {
   }
   if (!map.getSource(SELECTED_SOURCE_ID)) {
     map.addSource(SELECTED_SOURCE_ID, {
+      type: 'geojson',
+      data: featureCollection(),
+    });
+  }
+  if (!map.getSource(LAP_CROSSINGS_SOURCE_ID)) {
+    map.addSource(LAP_CROSSINGS_SOURCE_ID, {
       type: 'geojson',
       data: featureCollection(),
     });
@@ -655,6 +1388,24 @@ function initialize3DLayers() {
       },
     });
   }
+
+  if (!map.getLayer(LAP_CROSSINGS_LAYER_ID)) {
+    map.addLayer({
+      id: LAP_CROSSINGS_LAYER_ID,
+      type: 'circle',
+      source: LAP_CROSSINGS_SOURCE_ID,
+      layout: {
+        visibility: 'none',
+      },
+      paint: {
+        'circle-radius': 5,
+        'circle-color': ['get', 'color'],
+        'circle-stroke-color': '#fff7e3',
+        'circle-stroke-width': 1.5,
+        'circle-opacity': 0.96,
+      },
+    });
+  }
 }
 
 function emptyMapSources() {
@@ -663,11 +1414,13 @@ function emptyMapSources() {
   setSourceData(HITS_SOURCE_ID, featureCollection());
   setSourceData(MARKERS_SOURCE_ID, featureCollection());
   setSourceData(SELECTED_SOURCE_ID, featureCollection());
+  setSourceData(LAP_CROSSINGS_SOURCE_ID, featureCollection());
 }
 
 function clearTrack() {
   state.selectedPointIndex = null;
   elements.pointDetailOverlay.hidden = true;
+  removeDividerMarkers();
   emptyMapSources();
   hideSpeedLegend();
 }
@@ -1225,6 +1978,31 @@ function handleMapClick(event) {
     return;
   }
 
+  if (state.activeTab === 'lapAnalysis' && Number.isInteger(state.lapAnalysis.activeDividerIndex)) {
+    const nearestTrackPoint = findNearestTrackPointToLngLat(event.lngLat);
+    if (!nearestTrackPoint || nearestTrackPoint.distanceMeters > DIVIDER_SNAP_MAX_DISTANCE_METERS) {
+      setStatus(
+        `No nearby track point found for divider ${state.lapAnalysis.activeDividerIndex + 1}. Click closer to the imported line.`,
+        'Lap analysis',
+      );
+      return;
+    }
+
+    const snappedPoint = state.currentReport.points[nearestTrackPoint.pointIndex];
+    setDividerPin(
+      state.lapAnalysis.activeDividerIndex,
+      {
+        latitude: snappedPoint.latitude,
+        longitude: snappedPoint.longitude,
+        pointIndex: nearestTrackPoint.pointIndex,
+      },
+      {
+        statusMessage: `Pinned divider ${state.lapAnalysis.activeDividerIndex + 1} using imported fix ${nearestTrackPoint.pointIndex + 1}.`,
+      },
+    );
+    return;
+  }
+
   const features = map.queryRenderedFeatures(event.point, {
     layers: [BARS_LAYER_ID, HITS_LAYER_ID, MARKERS_LAYER_ID, SELECTED_LAYER_ID],
   });
@@ -1315,6 +2093,7 @@ function renderReport(report) {
   state.currentReport = report;
   state.currentFilePath = report.inputPath;
   elements.selectedFile.textContent = report.inputPath;
+  resetLapAnalysisForReport(report);
   renderSummary(report);
   renderMap(report);
   setBusy(false);
@@ -1338,7 +2117,12 @@ async function openLogFile() {
     renderReport(report);
   } catch (error) {
     state.currentReport = null;
+    state.lapAnalysis.trackSamples = [];
+    state.lapAnalysis.analysis = null;
+    state.lapAnalysis.dividerPins = Array.from({ length: state.lapAnalysis.sectorCount }, () => null);
+    state.lapAnalysis.activeDividerIndex = state.lapAnalysis.sectorCount ? 0 : null;
     clearTrack();
+    renderLapAnalysis();
     elements.mapOverlayMessage.hidden = false;
     elements.mapOverlayMessage.textContent = 'The parser failed for this file.';
     setStatus(error.message, 'Error');
@@ -1406,7 +2190,12 @@ elements.openLogButton.addEventListener('click', openLogFile);
 elements.exportGeoJsonButton.addEventListener('click', () => exportTrack('geojson'));
 elements.exportKmlButton.addEventListener('click', () => exportTrack('kml'));
 elements.barSizeRange.addEventListener('input', handleBarSizeChange);
+elements.lapSectorCount.addEventListener('change', handleLapSectorCountChange);
+elements.lapDividerList.addEventListener('click', handleLapDividerListClick);
 elements.pointDetailClose.addEventListener('click', closePointDetail);
+for (const button of elements.analysisTabButtons) {
+  button.addEventListener('click', handleAnalysisTabClick);
+}
 for (const input of elements.visualizationInputs) {
   input.addEventListener('change', handleVisualizationChange);
 }
@@ -1414,4 +2203,5 @@ for (const input of elements.visualizationInputs) {
 setBusy(false);
 renderBarSizeLabel();
 hideSpeedLegend();
+renderLapAnalysis();
 renderSentenceCounts({});

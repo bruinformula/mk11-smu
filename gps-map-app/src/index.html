@@ -41,102 +41,168 @@
           </div>
         </div>
 
-        <section class="detail-card">
-          <div class="detail-card-header">
-            <h2>Visualizations</h2>
-            <span class="chip muted">3D bars</span>
-          </div>
-          <div class="visualization-list">
-            <label class="visualization-option">
-              <input
-                id="visualization-speed-accel"
-                type="checkbox"
-                value="speedAccel"
-                checked
-              />
-              <span class="visualization-copy">
-                <strong>Speed / accel</strong>
-                <small>Bar height = speed, bar color = acceleration magnitude</small>
-              </span>
-            </label>
-            <label class="visualization-option">
-              <input id="visualization-lock-quality" type="checkbox" value="lockQuality" />
-              <span class="visualization-copy">
-                <strong>GPS lock quality</strong>
-                <small>Bar height and color follow the lock-quality value</small>
-              </span>
-            </label>
-            <label class="visualization-option">
-              <input id="visualization-snr" type="checkbox" value="snr" />
-              <span class="visualization-copy">
-                <strong>SNR</strong>
-                <small>Average signal-to-noise ratio recovered around each fix</small>
-              </span>
-            </label>
-            <label class="visualization-option">
-              <input id="visualization-satellite-count" type="checkbox" value="satelliteCount" />
-              <span class="visualization-copy">
-                <strong>Satellite count</strong>
-                <small>Uses satellites in the fix first, then falls back to satellites in view</small>
-              </span>
-            </label>
-          </div>
-          <p class="visualization-hint">
-            Click a transparent bar or any track point to inspect that fix in the compact overlay.
-          </p>
-        </section>
+        <div class="sidebar-tabs" role="tablist" aria-label="Analysis mode">
+          <button
+            id="analysis-tab-map"
+            class="sidebar-tab is-active"
+            type="button"
+            data-tab="map"
+            role="tab"
+            aria-selected="true"
+          >
+            Map
+          </button>
+          <button
+            id="analysis-tab-lap"
+            class="sidebar-tab"
+            type="button"
+            data-tab="lapAnalysis"
+            role="tab"
+            aria-selected="false"
+          >
+            Lap analysis
+          </button>
+        </div>
 
-        <section class="stats-grid" aria-label="Track statistics">
-          <article class="stat-card accent">
-            <span class="stat-label">Recovered fixes</span>
-            <strong id="fix-count">0</strong>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Track distance</span>
-            <strong id="distance-km">0 km</strong>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Sentence count</span>
-            <strong id="sentence-count">0</strong>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Bad checksums</span>
-            <strong id="checksum-count">0</strong>
-          </article>
-        </section>
+        <div id="sidebar-pane-lap" class="sidebar-pane" hidden>
+          <section class="detail-card lap-analysis-card">
+            <div class="detail-card-header">
+              <h2>Lap analysis</h2>
+              <span class="chip muted">beta</span>
+            </div>
+            <div class="lap-analysis-controls">
+              <label class="lap-control-field" for="lap-sector-count">
+                <span>Sector count</span>
+                <select id="lap-sector-count">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                </select>
+              </label>
+              <div class="lap-control-chip">
+                <span>Detection</span>
+                <strong>+/- 1 m</strong>
+              </div>
+            </div>
+            <p class="lap-analysis-hint">
+              Arm a divider, click the map to snap it onto the imported track, or drag the colored circle on the map. Any fixes within +/- 1 m of that pin are treated as divider crossings.
+            </p>
+            <div id="lap-divider-list" class="lap-divider-list"></div>
+          </section>
 
-        <section class="detail-card">
-          <div class="detail-card-header">
-            <h2>Track window</h2>
-            <span id="time-span" class="chip">No fixes yet</span>
-          </div>
-          <dl class="detail-grid">
-            <div>
-              <dt>Start</dt>
-              <dd id="start-fix">-</dd>
+          <section class="detail-card lap-results-card">
+            <div class="detail-card-header">
+              <h2>Sector results</h2>
+              <span id="lap-analysis-chip" class="chip muted">No data</span>
             </div>
-            <div>
-              <dt>End</dt>
-              <dd id="end-fix">-</dd>
-            </div>
-            <div>
-              <dt>Bounds</dt>
-              <dd id="track-bounds">-</dd>
-            </div>
-            <div>
-              <dt>Top speed</dt>
-              <dd id="top-speed">-</dd>
-            </div>
-          </dl>
-        </section>
+            <div id="lap-sector-summary" class="lap-sector-summary"></div>
+            <div id="lap-sector-table" class="lap-sector-table"></div>
+          </section>
+        </div>
 
-        <section class="detail-card">
-          <div class="detail-card-header">
-            <h2>Sentence mix</h2>
-            <span id="rmc-share" class="chip muted">Waiting</span>
-          </div>
-          <div id="sentence-counts" class="sentence-list"></div>
-        </section>
+        <div id="sidebar-pane-map" class="sidebar-pane">
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Visualizations</h2>
+              <span class="chip muted">3D bars</span>
+            </div>
+            <div class="visualization-list">
+              <label class="visualization-option">
+                <input
+                  id="visualization-speed-accel"
+                  type="checkbox"
+                  value="speedAccel"
+                  checked
+                />
+                <span class="visualization-copy">
+                  <strong>Speed / accel</strong>
+                  <small>Bar height = speed, bar color = acceleration magnitude</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-lock-quality" type="checkbox" value="lockQuality" />
+                <span class="visualization-copy">
+                  <strong>GPS lock quality</strong>
+                  <small>Bar height and color follow the lock-quality value</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-snr" type="checkbox" value="snr" />
+                <span class="visualization-copy">
+                  <strong>SNR</strong>
+                  <small>Average signal-to-noise ratio recovered around each fix</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-satellite-count" type="checkbox" value="satelliteCount" />
+                <span class="visualization-copy">
+                  <strong>Satellite count</strong>
+                  <small>Uses satellites in the fix first, then falls back to satellites in view</small>
+                </span>
+              </label>
+            </div>
+            <p class="visualization-hint">
+              Click a transparent bar or any track point to inspect that fix in the compact overlay.
+            </p>
+          </section>
+
+          <section class="stats-grid" aria-label="Track statistics">
+            <article class="stat-card accent">
+              <span class="stat-label">Recovered fixes</span>
+              <strong id="fix-count">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Track distance</span>
+              <strong id="distance-km">0 km</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Sentence count</span>
+              <strong id="sentence-count">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Bad checksums</span>
+              <strong id="checksum-count">0</strong>
+            </article>
+          </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Track window</h2>
+              <span id="time-span" class="chip">No fixes yet</span>
+            </div>
+            <dl class="detail-grid">
+              <div>
+                <dt>Start</dt>
+                <dd id="start-fix">-</dd>
+              </div>
+              <div>
+                <dt>End</dt>
+                <dd id="end-fix">-</dd>
+              </div>
+              <div>
+                <dt>Bounds</dt>
+                <dd id="track-bounds">-</dd>
+              </div>
+              <div>
+                <dt>Top speed</dt>
+                <dd id="top-speed">-</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Sentence mix</h2>
+              <span id="rmc-share" class="chip muted">Waiting</span>
+            </div>
+            <div id="sentence-counts" class="sentence-list"></div>
+          </section>
+        </div>
 
         <section class="detail-card status-card">
           <div class="detail-card-header">
