@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GNSS Track Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Python parser + Electron map</p>
+          <h1>GNSS Track Overlay</h1>
+          <p class="intro">
+            Recover valid fixes from mixed binary captures and lay the route over a real map.
+          </p>
+        </div>
+
+        <div class="actions-panel">
+          <button id="open-log-button" class="primary-button">Open GNSS Log</button>
+          <div id="selected-file" class="selected-file">No file selected</div>
+          <div class="secondary-actions">
+            <button id="export-geojson-button" class="secondary-button" disabled>
+              Export GeoJSON
+            </button>
+            <button id="export-kml-button" class="secondary-button" disabled>
+              Export KML
+            </button>
+          </div>
+        </div>
+
+        <section class="stats-grid" aria-label="Track statistics">
+          <article class="stat-card accent">
+            <span class="stat-label">Recovered fixes</span>
+            <strong id="fix-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Track distance</span>
+            <strong id="distance-km">0 km</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Sentence count</span>
+            <strong id="sentence-count">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Bad checksums</span>
+            <strong id="checksum-count">0</strong>
+          </article>
+        </section>
+
+        <section class="detail-card">
+          <div class="detail-card-header">
+            <h2>Track window</h2>
+            <span id="time-span" class="chip">No fixes yet</span>
+          </div>
+          <dl class="detail-grid">
+            <div>
+              <dt>Start</dt>
+              <dd id="start-fix">-</dd>
+            </div>
+            <div>
+              <dt>End</dt>
+              <dd id="end-fix">-</dd>
+            </div>
+            <div>
+              <dt>Bounds</dt>
+              <dd id="track-bounds">-</dd>
+            </div>
+            <div>
+              <dt>Top speed</dt>
+              <dd id="top-speed">-</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="detail-card">
+          <div class="detail-card-header">
+            <h2>Sentence mix</h2>
+            <span id="rmc-share" class="chip muted">Waiting</span>
+          </div>
+          <div id="sentence-counts" class="sentence-list"></div>
+        </section>
+
+        <section class="detail-card status-card">
+          <div class="detail-card-header">
+            <h2>Status</h2>
+          </div>
+          <p id="status-message">Open a GNSS log to parse and plot it.</p>
+        </section>
+      </aside>
+
+      <main class="map-stage">
+        <div class="map-topbar">
+          <div>
+            <p class="eyebrow">Live preview</p>
+            <h2 id="map-title">Waiting for a track</h2>
+          </div>
+          <div id="map-badge" class="map-badge">No parsed route</div>
+        </div>
+        <div class="map-frame">
+          <div id="map"></div>
+          <div id="map-overlay-message" class="map-overlay-message">
+            Choose a log file to recover its route.
+          </div>
+          <div id="speed-legend" class="speed-legend" hidden>
+            <div class="speed-legend-header">
+              <span id="speed-legend-caption">Speed heatbar</span>
+              <span id="speed-legend-peak" class="speed-legend-peak">Peak 0 km/h</span>
+            </div>
+            <div class="speed-legend-bar" aria-hidden="true"></div>
+            <div class="speed-legend-scale">
+              <span id="speed-legend-min">0 km/h</span>
+              <span id="speed-legend-mid">0 km/h</span>
+              <span id="speed-legend-max">0 km/h</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
