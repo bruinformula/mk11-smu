@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GNSS Track Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Python parser + Electron map</p>
+          <h1>GNSS Track Overlay</h1>
+          <p class="intro">
+            Recover valid fixes from mixed binary captures and lay the route over a real map.
+          </p>
+        </div>
+
+        <div class="actions-panel">
+          <button id="open-log-button" class="primary-button">Open GNSS Log</button>
+          <div id="selected-file" class="selected-file">No file selected</div>
+          <div class="secondary-actions">
+            <button id="export-geojson-button" class="secondary-button" disabled>
+              Export GeoJSON
+            </button>
+            <button id="export-kml-button" class="secondary-button" disabled>
+              Export KML
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-tabs" role="tablist" aria-label="Analysis mode">
+          <button
+            id="analysis-tab-map"
+            class="sidebar-tab is-active"
+            type="button"
+            data-tab="map"
+            role="tab"
+            aria-selected="true"
+          >
+            Map
+          </button>
+          <button
+            id="analysis-tab-lap"
+            class="sidebar-tab"
+            type="button"
+            data-tab="lapAnalysis"
+            role="tab"
+            aria-selected="false"
+          >
+            Lap analysis
+          </button>
+        </div>
+
+        <div id="sidebar-pane-lap" class="sidebar-pane" hidden>
+          <section class="detail-card lap-analysis-card">
+            <div class="detail-card-header">
+              <h2>Lap analysis</h2>
+              <span class="chip muted">beta</span>
+            </div>
+            <div class="lap-analysis-controls">
+              <label class="lap-control-field" for="lap-sector-count">
+                <span>Sector count</span>
+                <select id="lap-sector-count">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                </select>
+              </label>
+              <div class="lap-control-chip">
+                <span>Detection</span>
+                <strong>+/- 1 m</strong>
+              </div>
+            </div>
+            <p class="lap-analysis-hint">
+              Arm a divider, click the map to snap it onto the imported track, or drag the colored circle on the map. Any fixes within +/- 1 m of that pin are treated as divider crossings.
+            </p>
+            <div id="lap-divider-list" class="lap-divider-list"></div>
+          </section>
+
+          <section class="detail-card lap-results-card">
+            <div class="detail-card-header">
+              <h2>Sector results</h2>
+              <span id="lap-analysis-chip" class="chip muted">No data</span>
+            </div>
+            <div id="lap-sector-summary" class="lap-sector-summary"></div>
+            <div id="lap-sector-table" class="lap-sector-table"></div>
+          </section>
+        </div>
+
+        <div id="sidebar-pane-map" class="sidebar-pane">
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Visualizations</h2>
+              <span class="chip muted">3D bars</span>
+            </div>
+            <div class="visualization-list">
+              <label class="visualization-option">
+                <input
+                  id="visualization-speed-accel"
+                  type="checkbox"
+                  value="speedAccel"
+                  checked
+                />
+                <span class="visualization-copy">
+                  <strong>Speed / accel</strong>
+                  <small>Bar height = speed, bar color = acceleration magnitude</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-lock-quality" type="checkbox" value="lockQuality" />
+                <span class="visualization-copy">
+                  <strong>GPS lock quality</strong>
+                  <small>Bar height and color follow the lock-quality value</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-snr" type="checkbox" value="snr" />
+                <span class="visualization-copy">
+                  <strong>SNR</strong>
+                  <small>Average signal-to-noise ratio recovered around each fix</small>
+                </span>
+              </label>
+              <label class="visualization-option">
+                <input id="visualization-satellite-count" type="checkbox" value="satelliteCount" />
+                <span class="visualization-copy">
+                  <strong>Satellite count</strong>
+                  <small>Uses satellites in the fix first, then falls back to satellites in view</small>
+                </span>
+              </label>
+            </div>
+            <p class="visualization-hint">
+              Click a transparent bar or any track point to inspect that fix in the compact overlay.
+            </p>
+          </section>
+
+          <section class="stats-grid" aria-label="Track statistics">
+            <article class="stat-card accent">
+              <span class="stat-label">Recovered fixes</span>
+              <strong id="fix-count">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Track distance</span>
+              <strong id="distance-km">0 km</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Sentence count</span>
+              <strong id="sentence-count">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Bad checksums</span>
+              <strong id="checksum-count">0</strong>
+            </article>
+          </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Track window</h2>
+              <span id="time-span" class="chip">No fixes yet</span>
+            </div>
+            <dl class="detail-grid">
+              <div>
+                <dt>Start</dt>
+                <dd id="start-fix">-</dd>
+              </div>
+              <div>
+                <dt>End</dt>
+                <dd id="end-fix">-</dd>
+              </div>
+              <div>
+                <dt>Bounds</dt>
+                <dd id="track-bounds">-</dd>
+              </div>
+              <div>
+                <dt>Top speed</dt>
+                <dd id="top-speed">-</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>Sentence mix</h2>
+              <span id="rmc-share" class="chip muted">Waiting</span>
+            </div>
+            <div id="sentence-counts" class="sentence-list"></div>
+          </section>
+        </div>
+
+        <section class="detail-card status-card">
+          <div class="detail-card-header">
+            <h2>Status</h2>
+          </div>
+          <p id="status-message">Open a GNSS log to parse and plot it.</p>
+        </section>
+      </aside>
+
+      <main class="map-stage">
+        <div class="map-topbar">
+          <div>
+            <p class="eyebrow">Live preview</p>
+            <h2 id="map-title">Waiting for a track</h2>
+          </div>
+          <div id="map-badge" class="map-badge">No parsed route</div>
+        </div>
+        <div class="map-frame">
+          <div id="map"></div>
+          <canvas id="metric-overlay" class="metric-overlay" aria-hidden="true"></canvas>
+          <div id="map-overlay-message" class="map-overlay-message">
+            Choose a log file to recover its route.
+          </div>
+          <div id="speed-legend" class="speed-legend" hidden>
+            <div class="speed-legend-header">
+              <span id="speed-legend-caption">Speed heatbar</span>
+              <span id="speed-legend-peak" class="speed-legend-peak">Peak 0 km/h</span>
+            </div>
+            <div class="speed-legend-bar" aria-hidden="true"></div>
+            <div class="speed-legend-scale">
+              <span id="speed-legend-min">0 km/h</span>
+              <span id="speed-legend-mid">0 km/h</span>
+              <span id="speed-legend-max">0 km/h</span>
+            </div>
+          </div>
+
+          <div class="bar-size-control">
+            <div class="bar-size-control-header">
+              <label for="bar-size-range">Bar size</label>
+              <span id="bar-size-value" class="bar-size-value">1.0x</span>
+            </div>
+            <input
+              id="bar-size-range"
+              type="range"
+              min="0.5"
+              max="2.5"
+              step="0.1"
+              value="1"
+            />
+          </div>
+
+          <aside id="point-detail-overlay" class="point-detail-overlay" hidden aria-live="polite">
+            <div class="point-detail-shell">
+              <button id="point-detail-close" class="point-detail-close" type="button">
+                Hide
+              </button>
+              <div class="point-detail-header">
+                <div>
+                  <p class="eyebrow detail-eyebrow">Point inspection</p>
+                  <h2 id="point-detail-title">Track point</h2>
+                </div>
+                <div id="point-detail-time" class="map-badge">Unknown time</div>
+              </div>
+              <p id="point-detail-subtitle" class="point-detail-subtitle">
+                Click any bar or point on the map to inspect it.
+              </p>
+              <div class="point-detail-content">
+                <div class="point-radar-panel">
+                  <div id="point-radar-chart" class="point-radar-chart"></div>
+                </div>
+                <div class="point-detail-side">
+                  <div id="point-detail-summary" class="point-detail-summary"></div>
+                  <div id="point-radar-values" class="point-radar-values"></div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

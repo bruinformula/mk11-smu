@@ -61,7 +61,7 @@ main-build: mk11-smu.elf secondary-outputs
 
 # Tool invocations
 mk11-smu.elf mk11-smu.map: $(OBJS) $(USER_OBJS) /Users/guestaccount/STM32CubeIDE/workspace_1.19.0/mk11-smu/STM32L552CCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "mk11-smu.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"/Users/guestaccount/STM32CubeIDE/workspace_1.19.0/mk11-smu/STM32L552CCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="mk11-smu.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
+	arm-none-eabi-gcc -o "mk11-smu.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"/Users/guestaccount/STM32CubeIDE/workspace_1.19.0/mk11-smu/STM32L552CCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="mk11-smu.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

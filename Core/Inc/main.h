@@ -69,10 +69,6 @@ void Error_Handler(void);
 #define BASE_RST_GPIO_Port GPIOA
 #define BASE_1PPS_Pin GPIO_PIN_12
 #define BASE_1PPS_GPIO_Port GPIOA
-#define BASE_WKUP_Pin GPIO_PIN_15
-#define BASE_WKUP_GPIO_Port GPIOA
-#define ROVER_WKUP_Pin GPIO_PIN_5
-#define ROVER_WKUP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

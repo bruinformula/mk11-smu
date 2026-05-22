@@ -1,0 +1,14 @@
+{
+  "name": "gps-map-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop app for plotting noisy GNSS logs with Python parsing logic.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "42.2.0"
+  }
+}

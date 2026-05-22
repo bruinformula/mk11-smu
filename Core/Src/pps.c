@@ -44,8 +44,7 @@ HAL_StatusTypeDef PPS_Init(void) {
 void PPS_Process(uint32_t now_ms) {
 	uint8_t curr_state;
 
-	curr_state = (uint8_t) HAL_GPIO_ReadPin(BASE_1PPS_GPIO_Port,
-			BASE_1PPS_Pin);
+	curr_state = (uint8_t) HAL_GPIO_ReadPin(BASE_1PPS_GPIO_Port, BASE_1PPS_Pin);
 	gps1_pps_pin_state = curr_state;
 
 	if (pps_initialized == 0U) {
