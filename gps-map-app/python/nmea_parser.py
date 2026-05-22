@@ -13,8 +13,27 @@ from pathlib import Path
 from typing import Optional
 
 NMEA_SENTENCE_RE = re.compile(r"\$[A-Z0-9]{5},[^\r\n$]{0,160}?\*[0-9A-Fa-f]{2}")
+GGA_FRAGMENT_RE = re.compile(
+    r"(?P<time>\d{3,6}\.\d+),(?P<lat>\d{4,5}\.\d+),(?P<lat_hemi>[NS]),"
+    r"(?P<lon>\d{5,6}\.\d+),(?P<lon_hemi>[EW]),(?P<quality>\d),"
+    r"(?P<satellites>\d{1,2}),(?P<hdop>-?\d+(?:\.\d+)?),(?P<altitude>-?\d+(?:\.\d+)?),M,"
+    r"(?P<geoid>-?\d+(?:\.\d+)?),M"
+)
 RMC_TYPES = {"GNRMC", "GPRMC", "GARMC", "GLRMC", "GBRMC", "GQRMC"}
+GSV_TYPES = {"GPGSV", "GLGSV", "GAGSV", "GBGSV", "GQGSV", "GNGSV"}
+GSA_TYPES = {"GNGSA", "GPGSA", "GLGSA", "GAGSA", "GBGSA", "GQGSA"}
 KNOTS_TO_MPS = 0.514444
+LOCK_QUALITY_LABELS = {
+    0: "Invalid",
+    1: "GPS fix",
+    2: "DGPS fix",
+    3: "PPS fix",
+    4: "RTK fixed",
+    5: "RTK float",
+    6: "Estimated",
+    7: "Manual",
+    8: "Simulation",
+}
 
 
 @dataclass
@@ -25,12 +44,42 @@ class TrackPoint:
     speed_knots: Optional[float]
     speed_mps: Optional[float]
     course_deg: Optional[float]
+    altitude_m: Optional[float]
+    gps_lock_quality: Optional[int]
+    gps_lock_quality_label: Optional[str]
+    satellite_count_used: Optional[int]
+    satellite_count_in_view: Optional[int]
+    average_snr_dbhz: Optional[float]
+    max_snr_dbhz: Optional[float]
+    hdop: Optional[float]
+    longitudinal_accel_mps2: Optional[float]
+    latitudinal_accel_mps2: Optional[float]
+    accel_magnitude_mps2: Optional[float]
     sentence_type: str
     raw_sentence: str
 
 
 class ParserError(Exception):
     pass
+
+
+@dataclass
+class QualityContext:
+    lock_quality: Optional[int] = None
+    lock_quality_label: Optional[str] = None
+    satellite_count_used: Optional[int] = None
+    satellite_count_in_view: Optional[int] = None
+    average_snr_dbhz: Optional[float] = None
+    max_snr_dbhz: Optional[float] = None
+    hdop: Optional[float] = None
+    altitude_m: Optional[float] = None
+
+
+@dataclass
+class GsvTalkerState:
+    total_messages: int
+    total_satellites: int
+    parts: dict[int, list[float]]
 
 
 def validate_checksum(sentence: str) -> bool:
@@ -56,6 +105,20 @@ def extract_sentences(raw_bytes: bytes) -> tuple[list[str], int]:
     invalid_checksum_count = 0
 
     for match in NMEA_SENTENCE_RE.finditer(decoded):
+        sentence = match.group(0)
+        if validate_checksum(sentence):
+            sentences.append(sentence)
+        else:
+            invalid_checksum_count += 1
+
+    return sentences, invalid_checksum_count
+
+
+def iter_valid_sentences(line: str) -> tuple[list[str], int]:
+    sentences: list[str] = []
+    invalid_checksum_count = 0
+
+    for match in NMEA_SENTENCE_RE.finditer(line):
         sentence = match.group(0)
         if validate_checksum(sentence):
             sentences.append(sentence)
@@ -94,6 +157,16 @@ def parse_float(value: str) -> Optional[float]:
 
     try:
         return float(value)
+    except ValueError:
+        return None
+
+
+def parse_int(value: str) -> Optional[int]:
+    if not value:
+        return None
+
+    try:
+        return int(value)
     except ValueError:
         return None
 
@@ -155,6 +228,144 @@ def haversine_distance_meters(
     return 2.0 * earth_radius_m * math.asin(math.sqrt(arc))
 
 
+def parse_gga_fragment(line: str) -> Optional[dict]:
+    match = GGA_FRAGMENT_RE.search(line)
+    if match is None:
+        return None
+
+    lock_quality = parse_int(match.group("quality"))
+    return {
+        "lock_quality": lock_quality,
+        "lock_quality_label": LOCK_QUALITY_LABELS.get(lock_quality),
+        "satellite_count_used": parse_int(match.group("satellites")),
+        "hdop": parse_float(match.group("hdop")),
+        "altitude_m": parse_float(match.group("altitude")),
+    }
+
+
+def parse_gsv_sentence(sentence: str) -> Optional[dict]:
+    body = sentence[1:].split("*", 1)[0]
+    fields = body.split(",")
+    if len(fields) < 4:
+        return None
+
+    total_messages = parse_int(fields[1])
+    message_number = parse_int(fields[2])
+    total_satellites = parse_int(fields[3])
+    if total_messages is None or message_number is None:
+        return None
+
+    snr_values: list[float] = []
+    for index in range(7, len(fields), 4):
+        snr = parse_float(fields[index])
+        if snr is not None:
+            snr_values.append(snr)
+
+    return {
+        "talker": fields[0][:2],
+        "total_messages": total_messages,
+        "message_number": message_number,
+        "total_satellites": total_satellites,
+        "snr_values": snr_values,
+    }
+
+
+def parse_gsa_sentence(sentence: str) -> Optional[dict]:
+    body = sentence[1:].split("*", 1)[0]
+    fields = body.split(",")
+    if len(fields) < 17:
+        return None
+
+    fix_dimension = parse_int(fields[2])
+    pdop = parse_float(fields[15])
+    hdop = parse_float(fields[16])
+    vdop = parse_float(fields[17]) if len(fields) > 17 else None
+
+    return {
+        "fix_dimension": fix_dimension,
+        "pdop": pdop,
+        "hdop": hdop,
+        "vdop": vdop,
+    }
+
+
+def rebuild_quality_context(
+    quality_context: QualityContext,
+    talker_cycles: dict[str, GsvTalkerState],
+) -> None:
+    snr_values: list[float] = []
+    total_satellites = 0
+
+    for talker_state in talker_cycles.values():
+        total_satellites += talker_state.total_satellites
+        for part_values in talker_state.parts.values():
+            snr_values.extend(part_values)
+
+    quality_context.satellite_count_in_view = total_satellites or None
+    quality_context.average_snr_dbhz = (
+        round(sum(snr_values) / len(snr_values), 3) if snr_values else None
+    )
+    quality_context.max_snr_dbhz = max(snr_values) if snr_values else None
+
+
+def timestamp_to_datetime(timestamp: Optional[str]) -> Optional[datetime]:
+    if not timestamp:
+        return None
+
+    return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+
+def wrap_degrees(delta_degrees: float) -> float:
+    return ((delta_degrees + 180.0) % 360.0) - 180.0
+
+
+def add_motion_metrics(points: list[TrackPoint]) -> None:
+    if len(points) < 2:
+        return
+
+    for previous_point, current_point in zip(points, points[1:]):
+        previous_timestamp = timestamp_to_datetime(previous_point.timestamp)
+        current_timestamp = timestamp_to_datetime(current_point.timestamp)
+        if previous_timestamp is None or current_timestamp is None:
+            continue
+
+        delta_seconds = (current_timestamp - previous_timestamp).total_seconds()
+        if delta_seconds <= 0.0:
+            continue
+
+        if previous_point.speed_mps is not None and current_point.speed_mps is not None:
+            longitudinal_accel = (
+                current_point.speed_mps - previous_point.speed_mps
+            ) / delta_seconds
+            current_point.longitudinal_accel_mps2 = longitudinal_accel
+        else:
+            longitudinal_accel = None
+
+        if (
+            previous_point.course_deg is not None
+            and current_point.course_deg is not None
+            and previous_point.speed_mps is not None
+            and current_point.speed_mps is not None
+        ):
+            delta_heading = wrap_degrees(current_point.course_deg - previous_point.course_deg)
+            yaw_rate = math.radians(delta_heading) / delta_seconds
+            average_speed = (previous_point.speed_mps + current_point.speed_mps) / 2.0
+            current_point.latitudinal_accel_mps2 = average_speed * yaw_rate
+
+        components = [
+            value
+            for value in (
+                current_point.longitudinal_accel_mps2,
+                current_point.latitudinal_accel_mps2,
+            )
+            if value is not None
+        ]
+        if components:
+            current_point.accel_magnitude_mps2 = math.sqrt(
+                sum(component * component for component in components)
+            )
+
+
 def parse_rmc_sentence(sentence: str) -> Optional[TrackPoint]:
     body = sentence[1:].split("*", 1)[0]
     fields = body.split(",")
@@ -183,9 +394,31 @@ def parse_rmc_sentence(sentence: str) -> Optional[TrackPoint]:
         speed_knots=speed_knots,
         speed_mps=speed_mps,
         course_deg=course_deg,
+        altitude_m=None,
+        gps_lock_quality=None,
+        gps_lock_quality_label=None,
+        satellite_count_used=None,
+        satellite_count_in_view=None,
+        average_snr_dbhz=None,
+        max_snr_dbhz=None,
+        hdop=None,
+        longitudinal_accel_mps2=None,
+        latitudinal_accel_mps2=None,
+        accel_magnitude_mps2=None,
         sentence_type=sentence_type,
         raw_sentence=sentence,
     )
+
+
+def attach_quality_context(point: TrackPoint, quality_context: QualityContext) -> None:
+    point.altitude_m = quality_context.altitude_m
+    point.gps_lock_quality = quality_context.lock_quality
+    point.gps_lock_quality_label = quality_context.lock_quality_label
+    point.satellite_count_used = quality_context.satellite_count_used
+    point.satellite_count_in_view = quality_context.satellite_count_in_view
+    point.average_snr_dbhz = quality_context.average_snr_dbhz
+    point.max_snr_dbhz = quality_context.max_snr_dbhz
+    point.hdop = quality_context.hdop
 
 
 def build_geojson(points: list[TrackPoint], source_name: str) -> dict:
@@ -310,18 +543,72 @@ def summarize_points(points: list[TrackPoint]) -> tuple[Optional[dict], Optional
 
 def build_report(input_path: Path) -> dict:
     raw_bytes = input_path.read_bytes()
-    sentences, invalid_checksum_count = extract_sentences(raw_bytes)
-    sentence_counts = Counter(sentence[1:6] for sentence in sentences)
-
+    decoded = raw_bytes.decode("latin-1")
+    sentence_counts: Counter[str] = Counter()
+    invalid_checksum_count = 0
     points: list[TrackPoint] = []
-    for sentence in sentences:
-        sentence_type = sentence[1:6]
-        if sentence_type not in RMC_TYPES:
-            continue
+    quality_context = QualityContext()
+    talker_cycles: dict[str, GsvTalkerState] = {}
 
-        point = parse_rmc_sentence(sentence)
-        if point is not None:
+    for line in decoded.splitlines():
+        gga_fragment = parse_gga_fragment(line)
+        if gga_fragment is not None:
+            quality_context.lock_quality = gga_fragment["lock_quality"]
+            quality_context.lock_quality_label = gga_fragment["lock_quality_label"]
+            quality_context.satellite_count_used = gga_fragment["satellite_count_used"]
+            quality_context.hdop = gga_fragment["hdop"]
+            quality_context.altitude_m = gga_fragment["altitude_m"]
+
+        line_sentences, line_invalid_count = iter_valid_sentences(line)
+        invalid_checksum_count += line_invalid_count
+
+        for sentence in line_sentences:
+            sentence_type = sentence[1:6]
+            sentence_counts[sentence_type] += 1
+
+            if sentence_type in GSV_TYPES:
+                gsv_data = parse_gsv_sentence(sentence)
+                if gsv_data is not None:
+                    talker = gsv_data["talker"]
+                    total_messages = gsv_data["total_messages"]
+                    message_number = gsv_data["message_number"]
+                    total_satellites = gsv_data["total_satellites"] or 0
+                    talker_state = talker_cycles.get(talker)
+
+                    if (
+                        talker_state is None
+                        or message_number == 1
+                        or talker_state.total_messages != total_messages
+                    ):
+                        talker_state = GsvTalkerState(
+                            total_messages=total_messages,
+                            total_satellites=total_satellites,
+                            parts={},
+                        )
+                        talker_cycles[talker] = talker_state
+
+                    talker_state.total_satellites = total_satellites
+                    talker_state.parts[message_number] = gsv_data["snr_values"]
+                    rebuild_quality_context(quality_context, talker_cycles)
+                continue
+
+            if sentence_type in GSA_TYPES:
+                gsa_data = parse_gsa_sentence(sentence)
+                if gsa_data is not None and gsa_data["hdop"] is not None:
+                    quality_context.hdop = gsa_data["hdop"]
+                continue
+
+            if sentence_type not in RMC_TYPES:
+                continue
+
+            point = parse_rmc_sentence(sentence)
+            if point is None:
+                continue
+
+            attach_quality_context(point, quality_context)
             points.append(point)
+
+    add_motion_metrics(points)
 
     first_fix, last_fix, bounds, distance_meters = summarize_points(points)
 
@@ -329,7 +616,7 @@ def build_report(input_path: Path) -> dict:
         "inputPath": str(input_path.resolve()),
         "sourceName": input_path.name,
         "bytesRead": len(raw_bytes),
-        "sentenceCount": len(sentences),
+        "sentenceCount": sum(sentence_counts.values()),
         "invalidChecksumCount": invalid_checksum_count,
         "sentenceTypeCounts": dict(sorted(sentence_counts.items())),
         "fixCount": len(points),

@@ -13,7 +13,7 @@
     />
     <link
       rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -40,6 +40,51 @@
             </button>
           </div>
         </div>
+
+        <section class="detail-card">
+          <div class="detail-card-header">
+            <h2>Visualizations</h2>
+            <span class="chip muted">3D bars</span>
+          </div>
+          <div class="visualization-list">
+            <label class="visualization-option">
+              <input
+                id="visualization-speed-accel"
+                type="checkbox"
+                value="speedAccel"
+                checked
+              />
+              <span class="visualization-copy">
+                <strong>Speed / accel</strong>
+                <small>Bar height = speed, bar color = acceleration magnitude</small>
+              </span>
+            </label>
+            <label class="visualization-option">
+              <input id="visualization-lock-quality" type="checkbox" value="lockQuality" />
+              <span class="visualization-copy">
+                <strong>GPS lock quality</strong>
+                <small>Bar height and color follow the lock-quality value</small>
+              </span>
+            </label>
+            <label class="visualization-option">
+              <input id="visualization-snr" type="checkbox" value="snr" />
+              <span class="visualization-copy">
+                <strong>SNR</strong>
+                <small>Average signal-to-noise ratio recovered around each fix</small>
+              </span>
+            </label>
+            <label class="visualization-option">
+              <input id="visualization-satellite-count" type="checkbox" value="satelliteCount" />
+              <span class="visualization-copy">
+                <strong>Satellite count</strong>
+                <small>Uses satellites in the fix first, then falls back to satellites in view</small>
+              </span>
+            </label>
+          </div>
+          <p class="visualization-hint">
+            Click a transparent bar or any track point to inspect that fix in the compact overlay.
+          </p>
+        </section>
 
         <section class="stats-grid" aria-label="Track statistics">
           <article class="stat-card accent">
@@ -111,6 +156,7 @@
         </div>
         <div class="map-frame">
           <div id="map"></div>
+          <canvas id="metric-overlay" class="metric-overlay" aria-hidden="true"></canvas>
           <div id="map-overlay-message" class="map-overlay-message">
             Choose a log file to recover its route.
           </div>
@@ -126,11 +172,53 @@
               <span id="speed-legend-max">0 km/h</span>
             </div>
           </div>
+
+          <div class="bar-size-control">
+            <div class="bar-size-control-header">
+              <label for="bar-size-range">Bar size</label>
+              <span id="bar-size-value" class="bar-size-value">1.0x</span>
+            </div>
+            <input
+              id="bar-size-range"
+              type="range"
+              min="0.5"
+              max="2.5"
+              step="0.1"
+              value="1"
+            />
+          </div>
+
+          <aside id="point-detail-overlay" class="point-detail-overlay" hidden aria-live="polite">
+            <div class="point-detail-shell">
+              <button id="point-detail-close" class="point-detail-close" type="button">
+                Hide
+              </button>
+              <div class="point-detail-header">
+                <div>
+                  <p class="eyebrow detail-eyebrow">Point inspection</p>
+                  <h2 id="point-detail-title">Track point</h2>
+                </div>
+                <div id="point-detail-time" class="map-badge">Unknown time</div>
+              </div>
+              <p id="point-detail-subtitle" class="point-detail-subtitle">
+                Click any bar or point on the map to inspect it.
+              </p>
+              <div class="point-detail-content">
+                <div class="point-radar-panel">
+                  <div id="point-radar-chart" class="point-radar-chart"></div>
+                </div>
+                <div class="point-detail-side">
+                  <div id="point-detail-summary" class="point-detail-summary"></div>
+                  <div id="point-radar-values" class="point-radar-values"></div>
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </main>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>
