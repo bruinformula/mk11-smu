@@ -8,7 +8,7 @@ extern "C" {
 #include "main.h"
 #include <stdint.h>
 
-#define GPS_RX_BUFFER_SIZE    512U
+#define GPS_RX_BUFFER_SIZE    2048U
 #define GPS_LINE_BUFFER_SIZE  128U
 
 typedef struct {
@@ -60,10 +60,19 @@ typedef struct {
 	uint8_t baud_candidate_index;
 	uint32_t config_command_count;
 	uint8_t config_command_status;
+	uint32_t config_readback_count;
+	uint8_t config_readback_status;
 	uint8_t heading_message_enabled;
+	uint8_t heading_message_verified;
+	uint32_t debug_dump_count;
+	uint32_t debug_dump_fail_count;
 	uint8_t uart_rx_pin_level;
 	uint8_t uart_rx_pin_last_level;
 	uint32_t uart_rx_pin_transition_count;
+	uint32_t pair001_count;
+	int8_t pair001_last_result;
+	char pair001_last_msgid[8];
+	uint8_t gga_enable_acked;
 } GPS_Diag_t;
 
 extern volatile GPS_Data_t gps_data;

@@ -6,7 +6,26 @@
 
 #define GPS_DEFAULT_BAUD_RATE       460800U
 #define GPS_PQTMTAR_ENABLE_CMD      "$PQTMCFGMSGRATE,W,PQTMTAR,1,1*09\r\n"
+#define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
+#define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
+#define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
+#define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
+#define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
+#define GPS_DISABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,0*08\r\n"
+#define GPS_DISABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,0*16\r\n"
+#define GPS_SAVEPAR_CMD             "$PQTMSAVEPAR*5A\r\n"
 #define GPS_COMMAND_RETRY_MS        1000U
+#define GPS_BASE_RX_GPIO_PORT        GPIOB
+#define GPS_BASE_RX_PIN              GPIO_PIN_11
+
+typedef enum
+{
+  GPS_CONFIG_STAGE_ENABLE_WRITE = 0,
+  GPS_CONFIG_STAGE_WAIT_ENABLE_ACK,
+  GPS_CONFIG_STAGE_QUERY_READBACK,
+  GPS_CONFIG_STAGE_WAIT_READBACK,
+  GPS_CONFIG_STAGE_VERIFIED
+} GPS_ConfigStage_t;
 
 static UART_HandleTypeDef *gps_uart = NULL;
 static uint8_t gps_rx_byte = 0U;
@@ -16,11 +35,22 @@ static uint8_t gps_rx_buffer[GPS_RX_BUFFER_SIZE];
 
 static char gps_line_buffer[GPS_LINE_BUFFER_SIZE];
 static uint16_t gps_line_index = 0U;
-static uint8_t gps_heading_command_sent = 0U;
+static GPS_ConfigStage_t gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
 static uint32_t gps_last_command_ms = 0U;
 
 volatile GPS_Data_t gps_data = {0};
 volatile GPS_Diag_t gps_diag = {0};
+
+extern UART_HandleTypeDef huart2;
+
+static void GPS_HandleSentence(const char *sentence);
+static void GPS_ProcessPendingBytes(void);
+static void GPS_DebugMirrorSentence(const char *sentence);
+
+static void GPS_AllowImmediateRetry(void)
+{
+  gps_last_command_ms = HAL_GetTick() - GPS_COMMAND_RETRY_MS;
+}
 
 static uint16_t GPS_NextIndex(uint16_t idx)
 {
@@ -48,7 +78,7 @@ static void GPS_UpdateUartDiagState(void)
 
 static void GPS_SampleRxPinLevel(void)
 {
-  uint8_t level = (uint8_t)(((GPIOB->IDR & GPIO_PIN_7) != 0U) ? 1U : 0U);
+  uint8_t level = (uint8_t)((((GPS_BASE_RX_GPIO_PORT)->IDR & GPS_BASE_RX_PIN) != 0U) ? 1U : 0U);
 
   gps_diag.uart_rx_pin_level = level;
 
@@ -104,6 +134,20 @@ static HAL_StatusTypeDef GPS_SendCommand(const char *command)
     return HAL_ERROR;
   }
 
+  /* Echo to debug UART: "TX> " + exact bytes going to GPS, in one transmit */
+  {
+    uint16_t cmd_len = (uint16_t)strlen(command);
+    uint8_t echo_buf[72];
+    uint16_t echo_len = (uint16_t)(4U + cmd_len);
+    if (echo_len > sizeof(echo_buf))
+    {
+      echo_len = (uint16_t)sizeof(echo_buf);
+    }
+    memcpy(echo_buf, "TX> ", 4U);
+    memcpy(echo_buf + 4U, command, echo_len - 4U);
+    HAL_UART_Transmit(&huart2, echo_buf, echo_len, 20U);
+  }
+
   status = HAL_UART_Transmit(gps_uart,
                              (uint8_t *)command,
                              (uint16_t)strlen(command),
@@ -115,6 +159,21 @@ static HAL_StatusTypeDef GPS_SendCommand(const char *command)
   GPS_UpdateUartDiagState();
 
   return status;
+}
+
+static void GPS_DebugMirrorSentence(const char *sentence)
+{
+  uint16_t sentence_len;
+
+  if ((sentence == NULL) || (sentence[0] == '\0'))
+  {
+    return;
+  }
+
+  sentence_len = (uint16_t)strlen(sentence);
+
+  (void)HAL_UART_Transmit(&huart2, (uint8_t *)sentence, sentence_len, 20U);
+  (void)HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2U, 20U);
 }
 
 static void GPS_PushByte(uint8_t byte)
@@ -320,6 +379,102 @@ static void GPS_ParsePQTMTAR(const char *sentence)
   }
 }
 
+static void GPS_ParsePAIR001(const char *sentence)
+{
+  char buffer[GPS_LINE_BUFFER_SIZE];
+  char *fields[8] = {0};
+  uint32_t field_count;
+
+  snprintf(buffer, sizeof(buffer), "%s", sentence);
+  field_count = GPS_SplitFields(buffer, fields, 8U);
+
+  if (field_count < 3U)
+  {
+    return;
+  }
+
+  gps_diag.pair001_count++;
+  gps_diag.pair001_last_result = (int8_t)atoi(fields[2]);
+  snprintf((char *)gps_diag.pair001_last_msgid, sizeof(gps_diag.pair001_last_msgid), "%s", fields[1]);
+}
+
+static void GPS_ParsePQTMCFGMSGRATE(const char *sentence)
+{
+  char buffer[GPS_LINE_BUFFER_SIZE];
+  char *fields[8] = {0};
+  uint32_t field_count;
+  uint32_t rate;
+  uint32_t version;
+
+  snprintf(buffer, sizeof(buffer), "%s", sentence);
+  field_count = GPS_SplitFields(buffer, fields, 8U);
+
+  if (field_count < 2U)
+  {
+    return;
+  }
+
+  if (strcmp(fields[1], "OK") == 0)
+  {
+    if (field_count == 2U)
+    {
+      gps_diag.config_command_status = (uint8_t)HAL_OK;
+
+      if (gps_config_stage == GPS_CONFIG_STAGE_WAIT_ENABLE_ACK)
+      {
+        gps_config_stage = GPS_CONFIG_STAGE_QUERY_READBACK;
+        GPS_AllowImmediateRetry();
+      }
+
+      return;
+    }
+
+    if ((field_count < 5U) || (strcmp(fields[2], "PQTMTAR") != 0))
+    {
+      return;
+    }
+
+    gps_diag.config_readback_count++;
+    rate = (fields[3][0] != '\0') ? (uint32_t)strtoul(fields[3], NULL, 10) : 0U;
+    version = (fields[4][0] != '\0') ? (uint32_t)strtoul(fields[4], NULL, 10) : 0U;
+
+    if ((rate == 1U) && (version == 1U))
+    {
+      gps_diag.config_readback_status = (uint8_t)HAL_OK;
+      gps_diag.heading_message_enabled = 1U;
+      gps_diag.heading_message_verified = 1U;
+      gps_config_stage = GPS_CONFIG_STAGE_VERIFIED;
+    }
+    else
+    {
+      gps_diag.config_readback_status = (uint8_t)HAL_ERROR;
+      gps_diag.heading_message_enabled = 0U;
+      gps_diag.heading_message_verified = 0U;
+      gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
+      GPS_AllowImmediateRetry();
+    }
+
+    return;
+  }
+
+  if (strcmp(fields[1], "ERROR") == 0)
+  {
+    if ((field_count >= 3U) && (strcmp(fields[2], "PQTMTAR") == 0))
+    {
+      gps_diag.config_readback_status = (uint8_t)HAL_ERROR;
+    }
+    else
+    {
+      gps_diag.config_command_status = (uint8_t)HAL_ERROR;
+    }
+
+    gps_diag.heading_message_enabled = 0U;
+    gps_diag.heading_message_verified = 0U;
+    gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
+    GPS_AllowImmediateRetry();
+  }
+}
+
 static void GPS_HandleSentence(const char *sentence)
 {
   if (sentence == NULL)
@@ -345,14 +500,11 @@ static void GPS_HandleSentence(const char *sentence)
   }
   else if (strncmp(sentence, "$PQTMCFGMSGRATE", 15) == 0)
   {
-    if (strstr(sentence, ",OK") != NULL)
-    {
-      gps_diag.heading_message_enabled = 1U;
-    }
-    else if (strstr(sentence, ",ERROR") != NULL)
-    {
-      gps_diag.heading_message_enabled = 0U;
-    }
+    GPS_ParsePQTMCFGMSGRATE(sentence);
+  }
+  else if (strncmp(sentence, "$PAIR001", 8) == 0)
+  {
+    GPS_ParsePAIR001(sentence);
   }
 }
 
@@ -364,18 +516,19 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   }
 
   gps_uart = uart;
-  gps_heading_command_sent = 0U;
+  gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
   gps_last_command_ms = 0U;
 
   memset((void *)&gps_data, 0, sizeof(gps_data));
   memset((void *)&gps_diag, 0, sizeof(gps_diag));
+  gps_diag.pair001_last_result = -1;
   GPS_ResetRxState();
 
   gps_diag.init_count = 1U;
   gps_diag.active_baud_rate = gps_uart->Init.BaudRate;
   gps_diag.detected_baud_rate = gps_uart->Init.BaudRate;
   gps_diag.baud_locked = 1U;
-  gps_diag.uart_rx_pin_level = (uint8_t)(((GPIOB->IDR & GPIO_PIN_7) != 0U) ? 1U : 0U);
+  gps_diag.uart_rx_pin_level = (uint8_t)((((GPS_BASE_RX_GPIO_PORT)->IDR & GPS_BASE_RX_PIN) != 0U) ? 1U : 0U);
   gps_diag.uart_rx_pin_last_level = gps_diag.uart_rx_pin_level;
 
   if (gps_uart->Init.BaudRate != GPS_DEFAULT_BAUD_RATE)
@@ -386,6 +539,84 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   }
 
   GPS_UpdateUartDiagState();
+
+  /* Arm RX so bytes arriving during the restore reboot are captured */
+  gps_diag.start_receive_calls++;
+  {
+    HAL_StatusTypeDef arm_status = GPS_RearmReceiveIT();
+    if (arm_status != HAL_OK)
+    {
+      return arm_status;
+    }
+  }
+
+  /* Initialise PAIR protocol session */
+  (void)GPS_SendCommand(GPS_PAIR_INIT_CMD);
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 200U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
+
+  /* Query firmware version */
+  (void)GPS_SendCommand(GPS_QUERY_VER_CMD);
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 200U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
+
+  /* Enable GGA and RMC output; module ACKs with $PQTMCFGMSGRATE,OK */
+  (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 1000U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
+
+  if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
+  {
+    gps_config_stage = GPS_CONFIG_STAGE_WAIT_ENABLE_ACK;
+    gps_last_command_ms = HAL_GetTick();
+  }
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 1000U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
+
+  if (GPS_SendCommand(GPS_PQTMTAR_QUERY_CMD) == HAL_OK)
+  {
+    gps_diag.config_readback_status = (uint8_t)HAL_BUSY;
+    gps_config_stage = GPS_CONFIG_STAGE_WAIT_READBACK;
+    gps_last_command_ms = HAL_GetTick();
+  }
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 1000U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
+
+  /* Save to flash so message rates take effect */
+  (void)GPS_SendCommand(GPS_SAVEPAR_CMD);
+  {
+    uint32_t wait_start = HAL_GetTick();
+    while ((HAL_GetTick() - wait_start) < 2000U)
+    {
+      GPS_ProcessPendingBytes();
+    }
+  }
 
   return HAL_OK;
 }
@@ -405,15 +636,6 @@ HAL_StatusTypeDef GPS_StartReceiveIT(void)
 
   status = GPS_RearmReceiveIT();
 
-  if ((status == HAL_OK) && (gps_heading_command_sent == 0U))
-  {
-    if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
-    {
-      gps_heading_command_sent = 1U;
-      gps_last_command_ms = HAL_GetTick();
-    }
-  }
-
   return status;
 }
 
@@ -422,6 +644,11 @@ void GPS_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   if ((gps_uart == NULL) || (huart == NULL) || (huart->Instance != gps_uart->Instance))
   {
     return;
+  }
+  // Check if the Overrun Error flag is set
+  if (__HAL_UART_GET_FLAG(huart, UART_FLAG_ORE)) {
+      // Clear the ORE flag to unfreeze the RX hardware
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF);
   }
 
   GPS_PushByte(gps_rx_byte);
@@ -437,16 +664,35 @@ void GPS_Process(void)
   now = HAL_GetTick();
 
   if ((gps_uart != NULL)
-      && (gps_diag.rx_count == 0U)
-      && (gps_heading_command_sent != 0U)
+      && (gps_diag.pqtmtar_count == 0U)
+      && (gps_config_stage != GPS_CONFIG_STAGE_VERIFIED)
       && ((now - gps_last_command_ms) >= GPS_COMMAND_RETRY_MS))
   {
-    if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
+    if ((gps_config_stage == GPS_CONFIG_STAGE_ENABLE_WRITE)
+        || (gps_config_stage == GPS_CONFIG_STAGE_WAIT_ENABLE_ACK))
     {
-      gps_last_command_ms = now;
+      if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
+      {
+        gps_config_stage = GPS_CONFIG_STAGE_WAIT_ENABLE_ACK;
+        gps_last_command_ms = now;
+      }
+    }
+    else
+    {
+      if (GPS_SendCommand(GPS_PQTMTAR_QUERY_CMD) == HAL_OK)
+      {
+        gps_diag.config_readback_status = (uint8_t)HAL_BUSY;
+        gps_config_stage = GPS_CONFIG_STAGE_WAIT_READBACK;
+        gps_last_command_ms = now;
+      }
     }
   }
 
+  GPS_ProcessPendingBytes();
+}
+
+static void GPS_ProcessPendingBytes(void)
+{
   while (gps_rx_tail != gps_rx_head)
   {
     char c = (char)gps_rx_buffer[gps_rx_tail];
@@ -468,6 +714,7 @@ void GPS_Process(void)
         gps_line_index = 0U;
 
         GPS_HandleSentence((const char *)gps_diag.last_sentence);
+        GPS_DebugMirrorSentence((const char *)gps_diag.last_sentence);
         gps_diag.sentence_ready = 0U;
       }
     }

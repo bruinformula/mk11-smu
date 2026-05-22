@@ -8,4 +8,4 @@
 ../Core/Src/stm32l5xx_it.c:172:6:PendSV_Handler	1
 ../Core/Src/stm32l5xx_it.c:185:6:SysTick_Handler	1
 ../Core/Src/stm32l5xx_it.c:206:6:USART1_IRQHandler	1
-../Core/Src/stm32l5xx_it.c:223:6:UART4_IRQHandler	1
+../Core/Src/stm32l5xx_it.c:220:6:USART3_IRQHandler	1

@@ -12,18 +12,18 @@ static uint8_t pps_initialized = 0U;
 void PPS_ForcePinConfig(void) {
 	GPIO_InitTypeDef GPIO_InitStruct = { 0 };
 
-	if (GPS_1PPS_GPIO_Port == GPIOA) {
+	if (BASE_1PPS_GPIO_Port == GPIOA) {
 		__HAL_RCC_GPIOA_CLK_ENABLE();
-	} else if (GPS_1PPS_GPIO_Port == GPIOB) {
+	} else if (BASE_1PPS_GPIO_Port == GPIOB) {
 		__HAL_RCC_GPIOB_CLK_ENABLE();
-	} else if (GPS_1PPS_GPIO_Port == GPIOC) {
+	} else if (BASE_1PPS_GPIO_Port == GPIOC) {
 		__HAL_RCC_GPIOC_CLK_ENABLE();
 	}
 
-	GPIO_InitStruct.Pin = GPS_1PPS_Pin;
+	GPIO_InitStruct.Pin = BASE_1PPS_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
-	HAL_GPIO_Init(GPS_1PPS_GPIO_Port, &GPIO_InitStruct);
+	HAL_GPIO_Init(BASE_1PPS_GPIO_Port, &GPIO_InitStruct);
 }
 
 HAL_StatusTypeDef PPS_Init(void) {
@@ -44,7 +44,7 @@ HAL_StatusTypeDef PPS_Init(void) {
 void PPS_Process(uint32_t now_ms) {
 	uint8_t curr_state;
 
-	curr_state = (uint8_t) HAL_GPIO_ReadPin(GPS_1PPS_GPIO_Port, GPS_1PPS_Pin);
+	curr_state = (uint8_t) HAL_GPIO_ReadPin(BASE_1PPS_GPIO_Port, BASE_1PPS_Pin);
 	gps1_pps_pin_state = curr_state;
 
 	if (pps_initialized == 0U) {
