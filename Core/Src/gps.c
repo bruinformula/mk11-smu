@@ -4,17 +4,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define GPS_DEFAULT_BAUD_RATE       921600U
+#define GPS_DEFAULT_BAUD_RATE       230400U
 #define GPS_PQTMTAR_ENABLE_CMD      "$PQTMCFGMSGRATE,W,PQTMTAR,1,1*09\r\n"
 #define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
 #define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
 #define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
 #define GPS_ENABLE_NMEA_MODE_CMD    "$PAIR100,1,1*3B\r\n"
 #define GPS_QUERY_NMEA_MODE_CMD     "$PAIR101*3A\r\n"
+#define GPS_QUERY_PORT_UART1_CMD    "$PQTMCFGPORT,R,UART1*32\r\n"
+#define GPS_QUERY_PORT_UART2_CMD    "$PQTMCFGPORT,R,UART2*31\r\n"
+#define GPS_QUERY_PORT_UART3_CMD    "$PQTMCFGPORT,R,UART3*30\r\n"
+#define GPS_ENABLE_PORT_UART3_CMD   "$PQTMCFGPORT,W,UART3,230400,NMEA|RTCM3,NMEA|RTCM3*1C\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
+#define GPS_ENABLE_ALL_NMEA_PAIR_CMD "$PAIR062,-1,1*13\r\n"
 #define GPS_ENABLE_GGA_PAIR_CMD     "$PAIR062,0,1*3F\r\n"
 #define GPS_ENABLE_RMC_PAIR_CMD     "$PAIR062,4,1*3B\r\n"
+#define GPS_QUERY_ALL_NMEA_PAIR_CMD "$PAIR063,-1*0F\r\n"
 #define GPS_QUERY_GGA_PAIR_CMD      "$PAIR063,0*23\r\n"
 #define GPS_QUERY_RMC_PAIR_CMD      "$PAIR063,4*27\r\n"
 #define GPS_DISABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,0*08\r\n"
@@ -640,8 +646,15 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   /* Enable standard NMEA output and GGA/RMC rates */
   (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
   (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PORT_UART1_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PORT_UART2_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_PORT_UART3_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_ALL_NMEA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_QUERY_GGA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
@@ -743,10 +756,20 @@ void GPS_Process(void)
       && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
   {
     (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PORT_UART1_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PORT_UART2_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_PORT_UART3_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_ALL_NMEA_PAIR_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_GGA_PAIR_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
     gps_last_nmea_config_ms = now;
   }
 
