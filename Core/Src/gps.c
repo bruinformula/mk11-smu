@@ -4,13 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define GPS_DEFAULT_BAUD_RATE       460800U
+#define GPS_DEFAULT_BAUD_RATE       921600U
 #define GPS_PQTMTAR_ENABLE_CMD      "$PQTMCFGMSGRATE,W,PQTMTAR,1,1*09\r\n"
 #define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
 #define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
 #define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
+#define GPS_ENABLE_GGA_PAIR_CMD     "$PAIR062,0,1*3F\r\n"
+#define GPS_ENABLE_RMC_PAIR_CMD     "$PAIR062,4,1*3B\r\n"
 #define GPS_DISABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,0*08\r\n"
 #define GPS_DISABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,0*16\r\n"
 #define GPS_SAVEPAR_CMD             "$PQTMSAVEPAR*5A\r\n"
@@ -38,6 +40,7 @@ static char gps_line_buffer[GPS_LINE_BUFFER_SIZE];
 static uint16_t gps_line_index = 0U;
 static GPS_ConfigStage_t gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
 static uint32_t gps_last_command_ms = 0U;
+static uint32_t gps_last_nmea_config_ms = 0U;
 
 volatile GPS_Data_t gps_data = {0};
 volatile GPS_Diag_t gps_diag = {0};
@@ -575,6 +578,7 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   gps_uart = uart;
   gps_config_stage = GPS_CONFIG_STAGE_ENABLE_WRITE;
   gps_last_command_ms = 0U;
+  gps_last_nmea_config_ms = 0U;
 
   memset((void *)&gps_data, 0, sizeof(gps_data));
   memset((void *)&gps_diag, 0, sizeof(gps_diag));
@@ -628,6 +632,8 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   }
 
   /* Enable GGA and RMC output; module ACKs with $PQTMCFGMSGRATE,OK */
+  (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
   {
@@ -719,6 +725,17 @@ void GPS_Process(void)
   GPS_SampleRxPinLevel();
 
   now = HAL_GetTick();
+
+  if ((gps_uart != NULL)
+      && (((gps_diag.gga_count == 0U) || (gps_diag.rmc_count == 0U)))
+      && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
+  {
+    (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
+    gps_last_nmea_config_ms = now;
+  }
 
   if ((gps_uart != NULL)
       && (gps_diag.pqtmtar_count == 0U)
