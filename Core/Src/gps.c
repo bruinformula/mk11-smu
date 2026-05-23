@@ -9,13 +9,19 @@
 #define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
 #define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
 #define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
+#define GPS_ENABLE_NMEA_MODE_CMD    "$PAIR100,1,1*3B\r\n"
+#define GPS_QUERY_NMEA_MODE_CMD     "$PAIR101*3A\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
 #define GPS_ENABLE_GGA_PAIR_CMD     "$PAIR062,0,1*3F\r\n"
 #define GPS_ENABLE_RMC_PAIR_CMD     "$PAIR062,4,1*3B\r\n"
+#define GPS_QUERY_GGA_PAIR_CMD      "$PAIR063,0*23\r\n"
+#define GPS_QUERY_RMC_PAIR_CMD      "$PAIR063,4*27\r\n"
 #define GPS_DISABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,0*08\r\n"
 #define GPS_DISABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,0*16\r\n"
 #define GPS_SAVEPAR_CMD             "$PQTMSAVEPAR*5A\r\n"
+#define GPS_PAIR_SAVE_CMD           "$PAIR513*3D\r\n"
+#define GPS_QUERY_UART_CMD          "$PQTMCFGUART,R*36\r\n"
 #define GPS_COMMAND_RETRY_MS        1000U
 #define GPS_BASE_RX_GPIO_PORT        GPIOB
 #define GPS_BASE_RX_PIN              GPIO_PIN_11
@@ -631,11 +637,16 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
     }
   }
 
-  /* Enable GGA and RMC output; module ACKs with $PQTMCFGMSGRATE,OK */
+  /* Enable standard NMEA output and GGA/RMC rates */
+  (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_GGA_PAIR_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
   {
     uint32_t wait_start = HAL_GetTick();
     while ((HAL_GetTick() - wait_start) < 1000U)
@@ -672,6 +683,7 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   }
 
   /* Save to flash so message rates take effect */
+  (void)GPS_SendCommand(GPS_PAIR_SAVE_CMD);
   (void)GPS_SendCommand(GPS_SAVEPAR_CMD);
   {
     uint32_t wait_start = HAL_GetTick();
@@ -730,6 +742,7 @@ void GPS_Process(void)
       && (((gps_diag.gga_count == 0U) || (gps_diag.rmc_count == 0U)))
       && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
   {
+    (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
