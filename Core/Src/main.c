@@ -118,6 +118,7 @@ volatile uint8_t rover_wakeup_pin_state = 0U;
 volatile uint32_t gps_uart_error_count = 0U;
 volatile uint32_t gps_uart_abort_count = 0U;
 volatile uint32_t gps_uart_irq_count = 0U;
+volatile uint8_t gps_mode_pin_state = 0U;
 
 uint32_t last_imu_poll_time = 0U;
 uint32_t last_gps_log_time = 0U;
@@ -138,6 +139,7 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#if 0
 static void GNSS_RefreshPinStates(void) {
   base_reset_pin_state = (uint8_t) HAL_GPIO_ReadPin(BASE_RST_GPIO_Port,
       BASE_RST_Pin);
@@ -237,6 +239,7 @@ done:
 
   return status;
 }
+#endif
 
 static const char* GPS_QualityText(uint8_t quality) {
   switch (quality) {
@@ -255,6 +258,7 @@ static const char* GPS_QualityText(uint8_t quality) {
   }
 }
 
+#if 0
 static void GPS_LogSnapshotUart2(uint32_t now) {
   char log_buffer[320];
   char utc_time[sizeof(gps_data.utc_time)];
@@ -293,6 +297,7 @@ static void GPS_LogSnapshotUart2(uint32_t now) {
         (uint16_t) log_length, 100U);
   }
 }
+#endif
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if ((huart != NULL) && (huart->Instance == USART3)) {
