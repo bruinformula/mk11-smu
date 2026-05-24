@@ -9,14 +9,14 @@
 #define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
 #define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
 #define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
-#define GPS_ENABLE_NMEA_MODE_CMD    "$PAIR100,1,1*3B\r\n"
+#define GPS_ENABLE_NMEA_MODE_CMD    "$PAIR100,1,0*3A\r\n"
 #define GPS_QUERY_NMEA_MODE_CMD     "$PAIR101*3A\r\n"
-#define GPS_QUERY_PORT_UART1_CMD    "$PQTMCFGPORT,R,UART1*32\r\n"
-#define GPS_QUERY_PORT_UART2_CMD    "$PQTMCFGPORT,R,UART2*31\r\n"
-#define GPS_QUERY_PORT_UART3_CMD    "$PQTMCFGPORT,R,UART3*30\r\n"
-#define GPS_ENABLE_PORT_UART3_CMD   "$PQTMCFGPORT,W,UART3,230400,NMEA|RTCM3,NMEA|RTCM3*1C\r\n"
+#define GPS_ENABLE_PROTOCOL_CMD     "$PQTMCFGPROT,W,1,1,5,1*3C\r\n"
+#define GPS_QUERY_PROTOCOL_CMD      "$PQTMCFGPROT,R,1,1*3D\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
+#define GPS_QUERY_GGA_CMD           "$PQTMCFGMSGRATE,R,GGA*12\r\n"
+#define GPS_QUERY_RMC_CMD           "$PQTMCFGMSGRATE,R,RMC*0F\r\n"
 #define GPS_ENABLE_ALL_NMEA_PAIR_CMD "$PAIR062,-1,1*13\r\n"
 #define GPS_ENABLE_GGA_PAIR_CMD     "$PAIR062,0,1*3F\r\n"
 #define GPS_ENABLE_RMC_PAIR_CMD     "$PAIR062,4,1*3B\r\n"
@@ -28,6 +28,7 @@
 #define GPS_SAVEPAR_CMD             "$PQTMSAVEPAR*5A\r\n"
 #define GPS_PAIR_SAVE_CMD           "$PAIR513*3D\r\n"
 #define GPS_QUERY_UART_CMD          "$PQTMCFGUART,R*36\r\n"
+#define GPS_QUERY_UART1_CMD         "$PQTMCFGUART,R,1*2B\r\n"
 #define GPS_COMMAND_RETRY_MS        1000U
 #define GPS_BASE_RX_GPIO_PORT        GPIOB
 #define GPS_BASE_RX_PIN              GPIO_PIN_11
@@ -646,11 +647,11 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   /* Enable standard NMEA output and GGA/RMC rates */
   (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
   (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PORT_UART1_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PORT_UART2_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_PORT_UART3_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_PROTOCOL_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
@@ -659,7 +660,8 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
+  (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
   {
     uint32_t wait_start = HAL_GetTick();
     while ((HAL_GetTick() - wait_start) < 1000U)
@@ -756,11 +758,12 @@ void GPS_Process(void)
       && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
   {
     (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PORT_UART1_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PORT_UART2_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_PORT_UART3_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PORT_UART3_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_PROTOCOL_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
@@ -769,7 +772,8 @@ void GPS_Process(void)
     (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
+    (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
     gps_last_nmea_config_ms = now;
   }
 
