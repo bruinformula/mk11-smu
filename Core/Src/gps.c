@@ -36,6 +36,7 @@
 #define GPS_BASE_RX_GPIO_PORT        GPIOB
 #define GPS_BASE_RX_PIN              GPIO_PIN_11
 #define GPS_DEBUG                    1U
+#define GPS_ENABLE_HEADING_OUTPUT    0U
 
 typedef enum
 {
@@ -186,6 +187,25 @@ static HAL_StatusTypeDef GPS_SendCommand(const char *command)
   gps_diag.config_command_status = (uint8_t)status;
   gps_diag.uart_last_error_code = gps_uart->ErrorCode;
   GPS_UpdateUartDiagState();
+
+  return status;
+}
+
+static void GPS_DrainPending(uint32_t wait_ms)
+{
+  uint32_t wait_start = HAL_GetTick();
+
+  while ((HAL_GetTick() - wait_start) < wait_ms)
+  {
+    GPS_ProcessPendingBytes();
+  }
+}
+
+static HAL_StatusTypeDef GPS_SendCommandAndDrain(const char *command, uint32_t wait_ms)
+{
+  HAL_StatusTypeDef status = GPS_SendCommand(command);
+
+  GPS_DrainPending(wait_ms);
 
   return status;
 }
@@ -700,65 +720,39 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   }
 
   /* Initialise PAIR protocol session */
-  (void)GPS_SendCommand(GPS_PAIR_INIT_CMD);
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 200U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  (void)GPS_SendCommandAndDrain(GPS_PAIR_INIT_CMD, 200U);
 
   /* Query firmware version */
-  (void)GPS_SendCommand(GPS_QUERY_VER_CMD);
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 200U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_VER_CMD, 200U);
 
   /* Enable standard NMEA output and GGA/RMC rates */
-  (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_ALL_NMEA_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_GGA_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
-  (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
-  (void)GPS_SendCommand(GPS_DISABLE_PQTMTAR_CMD);
-  (void)GPS_SendCommand(GPS_DISABLE_PQTMTXT_CMD);
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 1000U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_NMEA_MODE_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_NMEA_MODE_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_UART_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_UART1_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_PROTOCOL_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_PROTOCOL_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_ALL_NMEA_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_GGA_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_RMC_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_ALL_NMEA_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_GGA_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_RMC_PAIR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_GGA_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_ENABLE_RMC_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_GGA_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_QUERY_RMC_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_DISABLE_PQTMTAR_CMD, 150U);
+  (void)GPS_SendCommandAndDrain(GPS_DISABLE_PQTMTXT_CMD, 150U);
 
+#if GPS_ENABLE_HEADING_OUTPUT
   if (GPS_SendCommand(GPS_PQTMTAR_ENABLE_CMD) == HAL_OK)
   {
     gps_config_stage = GPS_CONFIG_STAGE_WAIT_ENABLE_ACK;
     gps_last_command_ms = HAL_GetTick();
   }
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 1000U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  GPS_DrainPending(1000U);
 
   if (GPS_SendCommand(GPS_PQTMTAR_QUERY_CMD) == HAL_OK)
   {
@@ -766,24 +760,12 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
     gps_config_stage = GPS_CONFIG_STAGE_WAIT_READBACK;
     gps_last_command_ms = HAL_GetTick();
   }
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 1000U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  GPS_DrainPending(1000U);
+#endif
 
   /* Save to flash so message rates take effect */
-  (void)GPS_SendCommand(GPS_PAIR_SAVE_CMD);
-  (void)GPS_SendCommand(GPS_SAVEPAR_CMD);
-  {
-    uint32_t wait_start = HAL_GetTick();
-    while ((HAL_GetTick() - wait_start) < 2000U)
-    {
-      GPS_ProcessPendingBytes();
-    }
-  }
+  (void)GPS_SendCommandAndDrain(GPS_PAIR_SAVE_CMD, 200U);
+  (void)GPS_SendCommandAndDrain(GPS_SAVEPAR_CMD, 2000U);
 
   return HAL_OK;
 }
@@ -835,28 +817,23 @@ void GPS_Process(void)
       && (gps_diag.nmea_config_verified == 0U)
       && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
   {
-    (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_NMEA_MODE_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_RMC_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_ALL_NMEA_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_GGA_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_RMC_PAIR_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
-    (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
-    (void)GPS_SendCommand(GPS_DISABLE_PQTMTAR_CMD);
-    (void)GPS_SendCommand(GPS_DISABLE_PQTMTXT_CMD);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_NMEA_MODE_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_ALL_NMEA_PAIR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_GGA_PAIR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_RMC_PAIR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_QUERY_GGA_PAIR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_QUERY_RMC_PAIR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_GGA_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_ENABLE_RMC_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_QUERY_GGA_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_QUERY_RMC_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_DISABLE_PQTMTAR_CMD, 50U);
+    (void)GPS_SendCommandAndDrain(GPS_DISABLE_PQTMTXT_CMD, 50U);
     gps_last_nmea_config_ms = now;
   }
 
+#if GPS_ENABLE_HEADING_OUTPUT
   if ((gps_uart != NULL)
       && (gps_diag.pqtmtar_count == 0U)
       && (gps_config_stage != GPS_CONFIG_STAGE_VERIFIED)
@@ -881,6 +858,7 @@ void GPS_Process(void)
       }
     }
   }
+#endif
 
   GPS_ProcessPendingBytes();
 }
