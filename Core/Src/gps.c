@@ -12,11 +12,14 @@
 #define GPS_ENABLE_NMEA_MODE_CMD    "$PAIR100,1,0*3A\r\n"
 #define GPS_QUERY_NMEA_MODE_CMD     "$PAIR101*3A\r\n"
 #define GPS_ENABLE_PROTOCOL_CMD     "$PQTMCFGPROT,W,1,1,5,1*3C\r\n"
+#define GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD "$PQTMCFGPROT,W,1,1,1,1*38\r\n"
 #define GPS_QUERY_PROTOCOL_CMD      "$PQTMCFGPROT,R,1,1*3D\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
 #define GPS_QUERY_GGA_CMD           "$PQTMCFGMSGRATE,R,GGA*12\r\n"
 #define GPS_QUERY_RMC_CMD           "$PQTMCFGMSGRATE,R,RMC*0F\r\n"
+#define GPS_DISABLE_PQTMTAR_CMD     "$PQTMCFGMSGRATE,W,PQTMTAR,0,1*08\r\n"
+#define GPS_DISABLE_PQTMTXT_CMD     "$PQTMCFGMSGRATE,W,PQTMTXT,0,1*17\r\n"
 #define GPS_ENABLE_ALL_NMEA_PAIR_CMD "$PAIR062,-1,1*13\r\n"
 #define GPS_ENABLE_GGA_PAIR_CMD     "$PAIR062,0,1*3F\r\n"
 #define GPS_ENABLE_RMC_PAIR_CMD     "$PAIR062,4,1*3B\r\n"
@@ -65,6 +68,25 @@ static void GPS_ProcessPendingBytes(void);
 static void GPS_MirrorCommandToUart2(const char *command);
 static void GPS_MirrorSentenceToUart2(const char *sentence);
 static void GPS_MirrorDataCsvToUart2(void);
+
+static uint8_t GPS_IsSentenceType(const char *sentence, const char *type)
+{
+  if ((sentence == NULL) || (type == NULL))
+  {
+    return 0U;
+  }
+
+  return (uint8_t)(((sentence[0] == '$')
+                    && (sentence[1] != '\0')
+                    && (sentence[2] != '\0')
+                    && (strncmp(&sentence[3], type, 3) == 0)) ? 1U : 0U);
+}
+
+static void GPS_UpdateNmeaConfigVerified(void)
+{
+  gps_diag.nmea_config_verified = (uint8_t)(((gps_diag.gga_config_rate > 0U)
+                                             && (gps_diag.rmc_config_rate > 0U)) ? 1U : 0U);
+}
 
 static void GPS_AllowImmediateRetry(void)
 {
@@ -471,6 +493,39 @@ static void GPS_ParsePAIR001(const char *sentence)
   snprintf((char *)gps_diag.pair001_last_msgid, sizeof(gps_diag.pair001_last_msgid), "%s", fields[1]);
 }
 
+static void GPS_ParsePAIR063(const char *sentence)
+{
+  char buffer[GPS_LINE_BUFFER_SIZE];
+  char *fields[8] = {0};
+  uint32_t field_count;
+  int32_t type;
+  uint32_t rate;
+
+  snprintf(buffer, sizeof(buffer), "%s", sentence);
+  field_count = GPS_SplitFields(buffer, fields, 8U);
+
+  if (field_count < 3U)
+  {
+    return;
+  }
+
+  type = (int32_t)strtol(fields[1], NULL, 10);
+  rate = (fields[2][0] != '\0') ? (uint32_t)strtoul(fields[2], NULL, 10) : 0U;
+
+  if (type == 0)
+  {
+    gps_diag.gga_config_rate = rate;
+    gps_diag.gga_enable_acked = (rate > 0U) ? 1U : 0U;
+  }
+  else if (type == 4)
+  {
+    gps_diag.rmc_config_rate = rate;
+    gps_diag.rmc_enable_acked = (rate > 0U) ? 1U : 0U;
+  }
+
+  GPS_UpdateNmeaConfigVerified();
+}
+
 static void GPS_ParsePQTMCFGMSGRATE(const char *sentence)
 {
   char buffer[GPS_LINE_BUFFER_SIZE];
@@ -499,6 +554,22 @@ static void GPS_ParsePQTMCFGMSGRATE(const char *sentence)
         GPS_AllowImmediateRetry();
       }
 
+      return;
+    }
+
+    if ((field_count >= 4U) && (strcmp(fields[2], "GGA") == 0))
+    {
+      gps_diag.gga_config_rate = (fields[3][0] != '\0') ? (uint32_t)strtoul(fields[3], NULL, 10) : 0U;
+      gps_diag.gga_enable_acked = (gps_diag.gga_config_rate > 0U) ? 1U : 0U;
+      GPS_UpdateNmeaConfigVerified();
+      return;
+    }
+
+    if ((field_count >= 4U) && (strcmp(fields[2], "RMC") == 0))
+    {
+      gps_diag.rmc_config_rate = (fields[3][0] != '\0') ? (uint32_t)strtoul(fields[3], NULL, 10) : 0U;
+      gps_diag.rmc_enable_acked = (gps_diag.rmc_config_rate > 0U) ? 1U : 0U;
+      GPS_UpdateNmeaConfigVerified();
       return;
     }
 
@@ -555,15 +626,15 @@ static void GPS_HandleSentence(const char *sentence)
     return;
   }
 
-  if ((strncmp(sentence, "$GNRMC", 6) == 0) || (strncmp(sentence, "$GPRMC", 6) == 0))
+  if (GPS_IsSentenceType(sentence, "RMC") != 0U)
   {
     GPS_ParseRMC(sentence);
   }
-  else if ((strncmp(sentence, "$GNGGA", 6) == 0) || (strncmp(sentence, "$GPGGA", 6) == 0))
+  else if (GPS_IsSentenceType(sentence, "GGA") != 0U)
   {
     GPS_ParseGGA(sentence);
   }
-  else if ((strncmp(sentence, "$GNVTG", 6) == 0) || (strncmp(sentence, "$GPVTG", 6) == 0))
+  else if (GPS_IsSentenceType(sentence, "VTG") != 0U)
   {
     GPS_ParseVTG(sentence);
   }
@@ -578,6 +649,10 @@ static void GPS_HandleSentence(const char *sentence)
   else if (strncmp(sentence, "$PAIR001", 8) == 0)
   {
     GPS_ParsePAIR001(sentence);
+  }
+  else if (strncmp(sentence, "$PAIR063", 8) == 0)
+  {
+    GPS_ParsePAIR063(sentence);
   }
 }
 
@@ -650,7 +725,7 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
   (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
   (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-  (void)GPS_SendCommand(GPS_ENABLE_PROTOCOL_CMD);
+  (void)GPS_SendCommand(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD);
   (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
   (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
@@ -662,6 +737,8 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
   (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
   (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
   (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
+  (void)GPS_SendCommand(GPS_DISABLE_PQTMTAR_CMD);
+  (void)GPS_SendCommand(GPS_DISABLE_PQTMTXT_CMD);
   {
     uint32_t wait_start = HAL_GetTick();
     while ((HAL_GetTick() - wait_start) < 1000U)
@@ -755,6 +832,7 @@ void GPS_Process(void)
 
   if ((gps_uart != NULL)
       && (((gps_diag.gga_count == 0U) || (gps_diag.rmc_count == 0U)))
+      && (gps_diag.nmea_config_verified == 0U)
       && ((now - gps_last_nmea_config_ms) >= GPS_COMMAND_RETRY_MS))
   {
     (void)GPS_SendCommand(GPS_ENABLE_NMEA_MODE_CMD);
@@ -762,7 +840,7 @@ void GPS_Process(void)
     (void)GPS_SendCommand(GPS_QUERY_UART_CMD);
     (void)GPS_SendCommand(GPS_QUERY_UART1_CMD);
     (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
-    (void)GPS_SendCommand(GPS_ENABLE_PROTOCOL_CMD);
+    (void)GPS_SendCommand(GPS_ENABLE_NMEA_ONLY_PROTOCOL_CMD);
     (void)GPS_SendCommand(GPS_QUERY_PROTOCOL_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_ALL_NMEA_PAIR_CMD);
     (void)GPS_SendCommand(GPS_ENABLE_GGA_PAIR_CMD);
@@ -774,6 +852,8 @@ void GPS_Process(void)
     (void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
     (void)GPS_SendCommand(GPS_QUERY_GGA_CMD);
     (void)GPS_SendCommand(GPS_QUERY_RMC_CMD);
+    (void)GPS_SendCommand(GPS_DISABLE_PQTMTAR_CMD);
+    (void)GPS_SendCommand(GPS_DISABLE_PQTMTXT_CMD);
     gps_last_nmea_config_ms = now;
   }
 
