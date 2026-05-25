@@ -8,7 +8,7 @@ extern "C" {
 #include "main.h"
 #include <stdint.h>
 
-#define GPS_RX_BUFFER_SIZE    2048U
+#define GPS_RX_BUFFER_SIZE    4096U
 #define GPS_LINE_BUFFER_SIZE  128U
 
 typedef struct {
@@ -80,7 +80,9 @@ extern volatile GPS_Diag_t gps_diag;
 
 HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart);
 HAL_StatusTypeDef GPS_StartReceiveIT(void);
+void GPS_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart);
 void GPS_UART_RxCpltCallback(UART_HandleTypeDef *huart);
+void GPS_UART_TxCpltCallback(UART_HandleTypeDef *huart);
 void GPS_Process(void);
 
 #ifdef __cplusplus
