@@ -8,8 +8,11 @@ extern "C" {
 #include "main.h"
 #include <stdint.h>
 
-#define GPS1_POS_TX_ID   0x4F3U
-#define GPS1_NAV_TX_ID   0x4F4U
+/* GPS COG SMU IDs from the CAN ID lookup CSV, interpreted MSB-first. */
+#define GPS_COG_TIMESYNC_TX_ID 0x040U
+#define GPS_COG_POS_TX_ID      0x041U
+#define GPS_COG_NAV_TX_ID      0x042U
+#define GPS_COG_IMU_TX_ID      0x043U
 #define IMU1_ACCEL_TX_ID 0x4F5U
 #define IMU1_ATT_TX_ID   0x4F6U
 
@@ -17,8 +20,10 @@ extern "C" {
 #define IMU1_ATT_CAN_SCALE_CDEG_PER_DEG     (100.0f)
 #define GPS1_VEL_CAN_SCALE_CMPS_PER_MPS     (100.0f)
 #define GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG (100.0f)
-#define GPS1_ALT_CAN_SCALE_DM_PER_M         (10.0f)
+#define GPS1_ALT_CAN_SCALE_MM_PER_M         (1000.0f)
 #define GPS1_POS_CAN_SCALE_DEGE7_PER_DEG    (10000000.0f)
+#define GPS1_HDOP_CAN_SCALE_CENTI_PER_UNIT  (100.0f)
+#define GPS1_BASELINE_CAN_SCALE_MM_PER_M    (1000.0f)
 
 extern volatile uint32_t fdcan_tx_count;
 extern volatile uint32_t fdcan_rx_count;

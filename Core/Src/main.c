@@ -36,7 +36,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* #define GPS1_RST_DEBUG_HOLD */
-#define ROVER_BAUD_PROGRAM
+/* #define ROVER_BAUD_PROGRAM */
+#define ROVER_GPS_UART_HANDLE (&huart1)
 #define ROVER_FACTORY_BAUD  921600U
 //#define ROVER_TARGET_BAUD   460800U
 /* USER CODE END PD */
@@ -54,6 +55,8 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_usart3_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
@@ -138,7 +141,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	if ((huart != NULL) && (huart->Instance == USART3)) {
+	if ((huart != NULL) && (huart->Instance == ROVER_GPS_UART_HANDLE->Instance)) {
 		gps_uart_error_count++;
 		gps_diag.uart_last_error_code = huart->ErrorCode;
 		(void) GPS_StartReceiveIT();
@@ -146,7 +149,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_UART_AbortCpltCallback(UART_HandleTypeDef *huart) {
-	if ((huart != NULL) && (huart->Instance == USART3)) {
+	if ((huart != NULL) && (huart->Instance == ROVER_GPS_UART_HANDLE->Instance)) {
 		gps_uart_abort_count++;
 	}
 }
@@ -363,7 +366,7 @@ int main(void)
 				imu_init_ok = 0U;
 			}
 
-			if (GPS_Init(&huart3) == HAL_OK) {
+			if (GPS_Init(ROVER_GPS_UART_HANDLE) == HAL_OK) {
 				gps_init_ok = 1U;
 			} else {
 				gps_init_ok = 0U;
@@ -507,7 +510,7 @@ static void MX_FDCAN1_Init(void)
   /* USER CODE END FDCAN1_Init 1 */
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  hfdcan1.Init.FrameFormat = FDCAN_FRAME_FD_NO_BRS;
   hfdcan1.Init.Mode = FDCAN_MODE_EXTERNAL_LOOPBACK;
   hfdcan1.Init.AutoRetransmission = ENABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
@@ -765,6 +768,12 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
 
