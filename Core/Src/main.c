@@ -366,6 +366,7 @@ int main(void)
 				imu_init_ok = 0U;
 			}
 
+#ifdef SMU_GPS_IMU_CROSS
 			if (GPS_Init(ROVER_GPS_UART_HANDLE) == HAL_OK) {
 				gps_init_ok = 1U;
 			} else {
@@ -383,6 +384,7 @@ int main(void)
 			} else {
 				pps_init_ok = 0U;
 			}
+#endif /* SMU_GPS_IMU_CROSS */
 
 			if (State_Init() == HAL_OK) {
 				state_init_ok = 1U;
@@ -409,8 +411,10 @@ int main(void)
 				gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(BASE_RST_GPIO_Port,
 						BASE_RST_Pin);
 
+#ifdef SMU_GPS_IMU_CROSS
 				PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
 				GPS_Process();
+#endif /* SMU_GPS_IMU_CROSS */
 
 				if ((now - last_imu_poll_time) >= 10U) {
 					last_imu_poll_time = now;

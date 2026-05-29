@@ -426,6 +426,7 @@ void CAN_Process(uint32_t now_ms) {
 		CAN_SendImuAtt();
 	}
 
+#ifdef SMU_GPS_IMU_CROSS
 	if ((now_ms - last_gps_cog_timesync_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS) {
 		last_gps_cog_timesync_tx_time = now_ms;
 		CAN_SendGpsCogTimesync(now_ms);
@@ -437,4 +438,5 @@ void CAN_Process(uint32_t now_ms) {
 		CAN_SendGpsCogNav(now_ms);
 		CAN_SendGpsCogImu(now_ms);
 	}
+#endif /* SMU_GPS_IMU_CROSS */
 }

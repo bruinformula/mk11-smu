@@ -245,5 +245,7 @@ void State_UpdateFromImuRaw(int16_t gx_raw, int16_t gy_raw, int16_t gz_raw,
 	}
 
 	State_UpdateAttitude(dt_s);
+#ifdef SMU_GPS_IMU_CROSS
 	State_UpdateGpsNav(dt_s);
+#endif /* SMU_GPS_IMU_CROSS */
 }
