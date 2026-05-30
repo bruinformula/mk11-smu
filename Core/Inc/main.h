@@ -73,7 +73,10 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 /* Comment out for IMU-only (non-cross) mode: UART1/UART3 are ignored and
  * only IMU CAN frames (0x4F5 / 0x4F6) are transmitted. */
-//#define SMU_GPS_IMU_CROSS
+#define SMU_GPS_IMU_CROSS
+/* Simple debug mode: use the USART3/base GNSS as a standalone GPS.
+ * Enables basic NMEA only and skips RTK heading / PQTMTAR setup. */
+#define GPS_SIMPLE_STANDALONE_MODE
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

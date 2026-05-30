@@ -9,8 +9,10 @@
 #define GPS_PQTMTAR_QUERY_CMD       "$PQTMCFGMSGRATE,R,PQTMTAR,1*11\r\n"
 #define GPS_PAIR_INIT_CMD           "$PAIR002*38\r\n"
 #define GPS_QUERY_VER_CMD           "$PQTMQVER*08\r\n"
+#define GPS_STANDALONE_MODE_CMD     "$PQTMCFGRCVRMODE,W,0*2B\r\n"
 #define GPS_ENABLE_GGA_CMD          "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n"
 #define GPS_ENABLE_RMC_CMD          "$PQTMCFGMSGRATE,W,RMC,1*17\r\n"
+#define GPS_ENABLE_VTG_CMD          "$PQTMCFGMSGRATE,W,VTG,1*0E\r\n"
 #define GPS_EN_VTG_PAIR_CMD 		"$PAIR062,5,1*3A\r\n"
 #define GPS_EN_RMC_PAIR_CMD			"$PAIR062,4,1*3B\r\n"
 #define GPS_EN_GGA_PAIR_CMD			"$PAIR062,0,1*3F\r\n"
@@ -66,6 +68,7 @@ volatile GPS_Diag_t gps_diag = {0};
 extern UART_HandleTypeDef huart2;
 
 static void GPS_HandleSentence(const char *sentence);
+static void GPS_SendSimpleStandaloneCommands(void);
 static void GPS_ProcessPendingBytes(void);
 static void GPS_ProcessLiveCommandText(void);
 static void GPS_ProcessLiveCommand(void);
@@ -278,6 +281,9 @@ static void GPS_DrainRxDma(void)
 
 	if (dma_pos > gps_dma_rx_last_pos)
 	{
+		GPS_QueueMirrorBytesToUart2(&gps_dma_rx_buffer[gps_dma_rx_last_pos],
+				(uint16_t)(dma_pos - gps_dma_rx_last_pos));
+
 		while (gps_dma_rx_last_pos < dma_pos)
 		{
 			GPS_PushByte(gps_dma_rx_buffer[gps_dma_rx_last_pos]);
@@ -286,6 +292,9 @@ static void GPS_DrainRxDma(void)
 	}
 	else
 	{
+		GPS_QueueMirrorBytesToUart2(&gps_dma_rx_buffer[gps_dma_rx_last_pos],
+				(uint16_t)(GPS_DMA_RX_BUFFER_SIZE - gps_dma_rx_last_pos));
+
 		while (gps_dma_rx_last_pos < GPS_DMA_RX_BUFFER_SIZE)
 		{
 			GPS_PushByte(gps_dma_rx_buffer[gps_dma_rx_last_pos]);
@@ -293,6 +302,11 @@ static void GPS_DrainRxDma(void)
 		}
 
 		gps_dma_rx_last_pos = 0U;
+
+		if (dma_pos > 0U)
+		{
+			GPS_QueueMirrorBytesToUart2(&gps_dma_rx_buffer[0], dma_pos);
+		}
 
 		while (gps_dma_rx_last_pos < dma_pos)
 		{
@@ -908,6 +922,22 @@ static void GPS_HandleSentence(const char *sentence)
 	}
 }
 
+static void GPS_SendSimpleStandaloneCommands(void)
+{
+	/* Debug/bring-up path: make the USART3/base module behave like a normal
+	 * standalone GPS. Do not save to flash here; the compile-time mode controls
+	 * behavior on every boot without making persistent module changes. */
+	(void)GPS_SendCommand(GPS_PAIR_INIT_CMD);
+	(void)GPS_SendCommand(GPS_QUERY_VER_CMD);
+	(void)GPS_SendCommand(GPS_STANDALONE_MODE_CMD);
+	(void)GPS_SendCommand(GPS_ENABLE_GGA_CMD);
+	(void)GPS_SendCommand(GPS_ENABLE_RMC_CMD);
+	(void)GPS_SendCommand(GPS_ENABLE_VTG_CMD);
+	(void)GPS_SendCommand(GPS_EN_GGA_PAIR_CMD);
+	(void)GPS_SendCommand(GPS_EN_RMC_PAIR_CMD);
+	(void)GPS_SendCommand(GPS_EN_VTG_PAIR_CMD);
+}
+
 HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
 {
 	if (uart == NULL)
@@ -951,6 +981,14 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
 	{
 		return HAL_ERROR;
 	}
+
+#ifdef GPS_SIMPLE_STANDALONE_MODE
+	GPS_SendSimpleStandaloneCommands();
+	gps_diag.config_readback_status = (uint8_t)HAL_OK;
+	gps_config_stage = GPS_CONFIG_STAGE_VERIFIED;
+	gps_config_retry_exhausted = 1U;
+	return HAL_OK;
+#endif
 
 	/* Initialise PAIR protocol session */
 	(void)GPS_SendCommand(GPS_PAIR_INIT_CMD);
@@ -1233,7 +1271,9 @@ static void GPS_ProcessPendingBytes(void)
 				gps_line_index = 0U;
 
 				GPS_HandleSentence((const char *)gps_diag.last_sentence);
+#ifndef GPS_SIMPLE_STANDALONE_MODE
 				GPS_MirrorSentenceToUart2((const char *)gps_diag.last_sentence);
+#endif
 				GPS_MirrorDataCsvToUart2();
 				gps_diag.sentence_ready = 0U;
 			}
