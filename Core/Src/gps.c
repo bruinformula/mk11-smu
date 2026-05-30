@@ -875,34 +875,6 @@ static void GPS_ParsePQTMCFGMSGRATE(const char *sentence)
 	}
 }
 
-static void GPS_ParsePQTMTAR(const char *sentence)
-{
-  char buffer[GPS_LINE_BUFFER_SIZE];
-  char *fields[16] = {0};
-  uint32_t field_count;
-
-  snprintf(buffer, sizeof(buffer), "%s", sentence);
-  field_count = GPS_SplitFields(buffer, fields, 16U);
-
-  if (field_count < 13U)
-  {
-    return;
-  }
-
-  snprintf((char *)gps_data.utc_time, sizeof(gps_data.utc_time), "%s", fields[2]);
-
-  gps_data.heading_quality = (fields[3][0] != '\0') ? (uint8_t)atoi(fields[3]) : 0U;
-  gps_data.baseline_length_m = (fields[5][0] != '\0') ? (float)atof(fields[5]) : 0.0f;
-  gps_data.pitch_deg = (fields[6][0] != '\0') ? (float)atof(fields[6]) : 0.0f;
-  gps_data.heading_deg = (fields[8][0] != '\0') ? (float)atof(fields[8]) : 0.0f;
-  gps_data.heading_accuracy_deg = (fields[11][0] != '\0') ? (float)atof(fields[11]) : 0.0f;
-  gps_data.heading_valid = (uint8_t)((((gps_data.heading_quality == 4U)
-                                       || (gps_data.heading_quality == 5U))
-                                      && (fields[8][0] != '\0')) ? 1U : 0U);
-
-  gps_pqtmtar_count++;
-}
-
 static void GPS_HandleSentence(const char *sentence)
 {
 	if (sentence == NULL)
