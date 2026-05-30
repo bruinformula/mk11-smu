@@ -51,12 +51,12 @@
 FDCAN_HandleTypeDef hfdcan1;
 
 SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
-DMA_HandleTypeDef hdma_usart1_rx;
-DMA_HandleTypeDef hdma_usart1_tx;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_usart3_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
@@ -419,20 +419,26 @@ int main(void)
 				if ((now - last_imu_poll_time) >= 10U) {
 					last_imu_poll_time = now;
 
-					imu_last_status = (uint8_t) IMU_CheckWhoAmI((uint8_t*) &imu_whoami);
-					imu_comm_ok =
-							((imu_last_status == HAL_OK)
-									&& (imu_whoami == IMU_WHO_AM_I_VALUE)) ? 1U : 0U;
+					/* WHO_AM_I uses blocking SPI; only run when DMA bus is idle */
+					if (!IMU_IsBusy()) {
+						imu_last_status = (uint8_t) IMU_CheckWhoAmI((uint8_t*) &imu_whoami);
+						imu_comm_ok =
+								((imu_last_status == HAL_OK)
+										&& (imu_whoami == IMU_WHO_AM_I_VALUE)) ? 1U : 0U;
+					}
 
 					if (imu_comm_ok && imu_init_ok) {
-						if (IMU_ReadAxes((int16_t*) &imu_gx_raw, (int16_t*) &imu_gy_raw,
+						/* consume any completed DMA read */
+						if (IMU_PollReadAxes((int16_t*) &imu_gx_raw, (int16_t*) &imu_gy_raw,
 								(int16_t*) &imu_gz_raw, (int16_t*) &imu_ax_raw,
-								(int16_t*) &imu_ay_raw, (int16_t*) &imu_az_raw)
-								!= HAL_OK) {
-							imu_last_status = 0xFFU;
-						} else {
+								(int16_t*) &imu_ay_raw, (int16_t*) &imu_az_raw)) {
 							State_UpdateFromImuRaw(imu_gx_raw, imu_gy_raw, imu_gz_raw,
 									imu_ax_raw, imu_ay_raw, imu_az_raw, now);
+						}
+
+						/* kick off the next read for the following tick */
+						if (IMU_StartReadAxes() != HAL_OK) {
+							imu_last_status = 0xFFU;
 						}
 					}
 
@@ -514,7 +520,7 @@ static void MX_FDCAN1_Init(void)
   /* USER CODE END FDCAN1_Init 1 */
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan1.Init.FrameFormat = FDCAN_FRAME_FD_NO_BRS;
+  hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan1.Init.Mode = FDCAN_MODE_EXTERNAL_LOOPBACK;
   hfdcan1.Init.AutoRetransmission = ENABLE;
   hfdcan1.Init.TransmitPause = DISABLE;

@@ -46,16 +46,75 @@ volatile float imu1_pitch_deg = 0.0f;
 volatile float imu1_roll_deg = 0.0f;
 volatile float imu1_yaw_deg = 0.0f;
 
+volatile float imu_grav_ref_x = 0.0f;
+volatile float imu_grav_ref_y = 0.0f;
+volatile float imu_grav_ref_z = 1.0f;
+
+static float imu_cal_R[3][3] = {
+	{ 1.0f, 0.0f, 0.0f },
+	{ 0.0f, 1.0f, 0.0f },
+	{ 0.0f, 0.0f, 1.0f }
+};
+
 static float imu_cal_sum_gx = 0.0f;
 static float imu_cal_sum_gy = 0.0f;
 static float imu_cal_sum_gz = 0.0f;
 static float imu_cal_sum_ax = 0.0f;
 static float imu_cal_sum_ay = 0.0f;
 static float imu_cal_sum_az = 0.0f;
+static float imu_accel_scale = 1.0f;
 
 static uint32_t last_attitude_update_ms = 0U;
 static float gps1_vel_kf_state_mps = 0.0f;
 static float gps1_vel_kf_P = 1.0f;
+
+static void State_ComputeCalRotation(float gx, float gy, float gz) {
+	float mag = sqrtf((gx * gx) + (gy * gy) + (gz * gz));
+	if (mag < 1e-6f) {
+		/* degenerate — leave R as identity */
+		return;
+	}
+
+	float ux = gx / mag;
+	float uy = gy / mag;
+	float uz = gz / mag;
+
+	/* cos and sin of the angle between u and [0,0,1] */
+	float cos_theta = uz;
+	float sin_theta = sqrtf((ux * ux) + (uy * uy));
+
+	if (sin_theta < 1e-6f) {
+		if (uz > 0.0f) {
+			/* already pointing +Z — identity */
+			imu_cal_R[0][0] = 1.0f; imu_cal_R[0][1] = 0.0f; imu_cal_R[0][2] = 0.0f;
+			imu_cal_R[1][0] = 0.0f; imu_cal_R[1][1] = 1.0f; imu_cal_R[1][2] = 0.0f;
+			imu_cal_R[2][0] = 0.0f; imu_cal_R[2][1] = 0.0f; imu_cal_R[2][2] = 1.0f;
+		} else {
+			/* pointing -Z (upside down) — 180 deg around X */
+			imu_cal_R[0][0] = 1.0f; imu_cal_R[0][1] =  0.0f; imu_cal_R[0][2] =  0.0f;
+			imu_cal_R[1][0] = 0.0f; imu_cal_R[1][1] = -1.0f; imu_cal_R[1][2] =  0.0f;
+			imu_cal_R[2][0] = 0.0f; imu_cal_R[2][1] =  0.0f; imu_cal_R[2][2] = -1.0f;
+		}
+		return;
+	}
+
+	/* rotation axis k = normalize(u x [0,0,1]) = [uy, -ux, 0] / sin_theta */
+	float kx = uy / sin_theta;
+	float ky = -ux / sin_theta;
+	float kz = 0.0f;
+	float t = 1.0f - cos_theta;
+
+	/* Rodrigues' rotation formula */
+	imu_cal_R[0][0] = cos_theta + (kx * kx * t);
+	imu_cal_R[0][1] = (kx * ky * t) - (kz * sin_theta);
+	imu_cal_R[0][2] = (kx * kz * t) + (ky * sin_theta);
+	imu_cal_R[1][0] = (ky * kx * t) + (kz * sin_theta);
+	imu_cal_R[1][1] = cos_theta + (ky * ky * t);
+	imu_cal_R[1][2] = (ky * kz * t) - (kx * sin_theta);
+	imu_cal_R[2][0] = (kz * kx * t) - (ky * sin_theta);
+	imu_cal_R[2][1] = (kz * ky * t) + (kx * sin_theta);
+	imu_cal_R[2][2] = cos_theta + (kz * kz * t);
+}
 
 static float WrapAngleDeg(float angle_deg) {
 	while (angle_deg >= 180.0f) {
@@ -172,12 +231,21 @@ HAL_StatusTypeDef State_Init(void) {
 	imu1_roll_deg = 0.0f;
 	imu1_yaw_deg = 0.0f;
 
+	imu_grav_ref_x = 0.0f;
+	imu_grav_ref_y = 0.0f;
+	imu_grav_ref_z = 1.0f;
+
+	imu_cal_R[0][0] = 1.0f; imu_cal_R[0][1] = 0.0f; imu_cal_R[0][2] = 0.0f;
+	imu_cal_R[1][0] = 0.0f; imu_cal_R[1][1] = 1.0f; imu_cal_R[1][2] = 0.0f;
+	imu_cal_R[2][0] = 0.0f; imu_cal_R[2][1] = 0.0f; imu_cal_R[2][2] = 1.0f;
+
 	imu_cal_sum_gx = 0.0f;
 	imu_cal_sum_gy = 0.0f;
 	imu_cal_sum_gz = 0.0f;
 	imu_cal_sum_ax = 0.0f;
 	imu_cal_sum_ay = 0.0f;
 	imu_cal_sum_az = 0.0f;
+	imu_accel_scale = 1.0f;
 
 	last_attitude_update_ms = 0U;
 	gps1_vel_kf_state_mps = 0.0f;
@@ -216,9 +284,26 @@ void State_UpdateFromImuRaw(int16_t gx_raw, int16_t gy_raw, int16_t gz_raw,
 			imu_gy_bias_dps = imu_cal_sum_gy / (float) IMU_CAL_SAMPLES;
 			imu_gz_bias_dps = imu_cal_sum_gz / (float) IMU_CAL_SAMPLES;
 
-			imu_ax_bias_g = imu_cal_sum_ax / (float) IMU_CAL_SAMPLES;
-			imu_ay_bias_g = imu_cal_sum_ay / (float) IMU_CAL_SAMPLES;
-			imu_az_bias_g = (imu_cal_sum_az / (float) IMU_CAL_SAMPLES) - 1.0f;
+			float avg_ax = imu_cal_sum_ax / (float) IMU_CAL_SAMPLES;
+			float avg_ay = imu_cal_sum_ay / (float) IMU_CAL_SAMPLES;
+			float avg_az = imu_cal_sum_az / (float) IMU_CAL_SAMPLES;
+
+			/* store gravity reference for live inspection */
+			imu_grav_ref_x = avg_ax;
+			imu_grav_ref_y = avg_ay;
+			imu_grav_ref_z = avg_az;
+
+			/* accel biases are zero — rotation matrix handles gravity alignment */
+			imu_ax_bias_g = 0.0f;
+			imu_ay_bias_g = 0.0f;
+			imu_az_bias_g = 0.0f;
+
+			State_ComputeCalRotation(avg_ax, avg_ay, avg_az);
+
+			float grav_mag = sqrtf((avg_ax * avg_ax) + (avg_ay * avg_ay) + (avg_az * avg_az));
+			if (grav_mag > 0.5f && grav_mag < 2.0f) {
+				imu_accel_scale = 1.0f / grav_mag;
+			}
 
 			imu_cal_done = 1U;
 		}
@@ -231,6 +316,27 @@ void State_UpdateFromImuRaw(int16_t gx_raw, int16_t gy_raw, int16_t gz_raw,
 	imu_ax_corr_g = imu_ax_g - imu_ax_bias_g;
 	imu_ay_corr_g = imu_ay_g - imu_ay_bias_g;
 	imu_az_corr_g = imu_az_g - imu_az_bias_g;
+
+	/* rotate sensor-frame readings into the calibrated body frame */
+	{
+		float ax = imu_ax_corr_g;
+		float ay = imu_ay_corr_g;
+		float az = imu_az_corr_g;
+		float gx = imu_gx_corr_dps;
+		float gy = imu_gy_corr_dps;
+		float gz = imu_gz_corr_dps;
+
+		imu_ax_corr_g   = (imu_cal_R[0][0] * ax) + (imu_cal_R[0][1] * ay) + (imu_cal_R[0][2] * az);
+		imu_ay_corr_g   = (imu_cal_R[1][0] * ax) + (imu_cal_R[1][1] * ay) + (imu_cal_R[1][2] * az);
+		imu_az_corr_g   = (imu_cal_R[2][0] * ax) + (imu_cal_R[2][1] * ay) + (imu_cal_R[2][2] * az);
+		imu_gx_corr_dps = (imu_cal_R[0][0] * gx) + (imu_cal_R[0][1] * gy) + (imu_cal_R[0][2] * gz);
+		imu_gy_corr_dps = (imu_cal_R[1][0] * gx) + (imu_cal_R[1][1] * gy) + (imu_cal_R[1][2] * gz);
+		imu_gz_corr_dps = (imu_cal_R[2][0] * gx) + (imu_cal_R[2][1] * gy) + (imu_cal_R[2][2] * gz);
+	}
+
+	imu_ax_corr_g *= imu_accel_scale;
+	imu_ay_corr_g *= imu_accel_scale;
+	imu_az_corr_g *= imu_accel_scale;
 
 	if (last_attitude_update_ms == 0U) {
 		last_attitude_update_ms = now_ms;

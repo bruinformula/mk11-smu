@@ -13,6 +13,11 @@
 #define CAN_GPS_ERROR_UART               0x02U
 #define CAN_GPS_ERROR_NO_SENTENCES       0x04U
 
+#define IMU_FD_TX_INTERVAL_MS   10U
+#define IMU_FD_EXPECTED_PERIOD  100U    /* 100-us units → 10 ms between samples */
+#define IMU_FD_DT_S             0.010f
+#define IMU_FD_GRAVITY_MPS2     9.80665f
+
 volatile uint32_t fdcan_tx_count = 0U;
 volatile uint32_t fdcan_rx_count = 0U;
 volatile uint32_t fdcan_rx_error_count = 0U;
@@ -26,6 +31,24 @@ static uint32_t last_imu1_accel_tx_time = 0U;
 static uint32_t last_imu1_att_tx_time = 0U;
 static uint32_t last_gps_cog_timesync_tx_time = 0U;
 static uint32_t last_gps_cog_data_tx_time = 0U;
+
+static uint32_t last_imu_fd_tx_time = 0U;
+static uint8_t  imu_fd_half         = 0U;   /* 0=capture s1, 1=capture s2+send */
+
+/* Sample-1 snapshot fields */
+static int16_t  imu_fd_s1_ax,  imu_fd_s1_ay,  imu_fd_s1_az;
+static int16_t  imu_fd_s1_aa,  imu_fd_s1_ab,  imu_fd_s1_ac;
+static int16_t  imu_fd_s1_vx,  imu_fd_s1_vy,  imu_fd_s1_vz;
+static int16_t  imu_fd_s1_gx,  imu_fd_s1_gy,  imu_fd_s1_gz;
+static uint32_t imu_fd_s1_ts_us;
+
+/* Running integration / differentiation state */
+static float imu_fd_prev_gx_dps = 0.0f;
+static float imu_fd_prev_gy_dps = 0.0f;
+static float imu_fd_prev_gz_dps = 0.0f;
+static float imu_fd_vel_x_mps   = 0.0f;
+static float imu_fd_vel_y_mps   = 0.0f;
+static float imu_fd_vel_z_mps   = 0.0f;
 
 static uint8_t can_imu_comm_ok = 0U;
 static uint8_t can_imu_init_ok = 0U;
@@ -356,6 +379,118 @@ static void CAN_SendGpsCogImu(uint32_t now_ms) {
 	(void) CAN_Send(GPS_COG_IMU_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);
 }
 
+static void CAN_SendImuFd(uint32_t now_ms) {
+	uint32_t ts_us;
+	uint16_t error_flags;
+	float gx_now, gy_now, gz_now;
+	float ang_a, ang_b, ang_c;
+	int16_t ax_mg, ay_mg, az_mg;
+	int16_t aa, ab, ac;
+	int16_t vx, vy, vz;
+	int16_t gx, gy, gz;
+	uint32_t actual_dt_us;
+	uint32_t expected_dt_us;
+	uint16_t jitter;
+
+	ts_us = now_ms * 1000U;
+
+	error_flags = 0U;
+	if (can_imu_comm_ok == 0U) { error_flags |= 0x0001U; }
+	if (can_imu_init_ok == 0U) { error_flags |= 0x0002U; }
+	if (imu_cal_done    == 0U) { error_flags |= 0x0004U; }
+
+	/* angular acceleration: finite difference of corrected gyro */
+	gx_now = imu_gx_corr_dps;
+	gy_now = imu_gy_corr_dps;
+	gz_now = imu_gz_corr_dps;
+	ang_a = (gx_now - imu_fd_prev_gx_dps) / IMU_FD_DT_S;
+	ang_b = (gy_now - imu_fd_prev_gy_dps) / IMU_FD_DT_S;
+	ang_c = (gz_now - imu_fd_prev_gz_dps) / IMU_FD_DT_S;
+	imu_fd_prev_gx_dps = gx_now;
+	imu_fd_prev_gy_dps = gy_now;
+	imu_fd_prev_gz_dps = gz_now;
+
+	/* linear velocity: integrate corrected accel (subtract 1g from Z to remove gravity) */
+	imu_fd_vel_x_mps += imu_ax_corr_g * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
+	imu_fd_vel_y_mps += imu_ay_corr_g * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
+	imu_fd_vel_z_mps += (imu_az_corr_g - 1.0f) * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
+
+	ax_mg = CAN_ClampS16(imu_ax_corr_g * IMU1_ACCEL_CAN_SCALE_MG_PER_G);
+	ay_mg = CAN_ClampS16(imu_ay_corr_g * IMU1_ACCEL_CAN_SCALE_MG_PER_G);
+	az_mg = CAN_ClampS16(imu_az_corr_g * IMU1_ACCEL_CAN_SCALE_MG_PER_G);
+	aa    = CAN_ClampS16(ang_a * IMU_FD_ANG_ACCEL_SCALE);
+	ab    = CAN_ClampS16(ang_b * IMU_FD_ANG_ACCEL_SCALE);
+	ac    = CAN_ClampS16(ang_c * IMU_FD_ANG_ACCEL_SCALE);
+	vx    = CAN_ClampS16(imu_fd_vel_x_mps * IMU_FD_LIN_VEL_SCALE);
+	vy    = CAN_ClampS16(imu_fd_vel_y_mps * IMU_FD_LIN_VEL_SCALE);
+	vz    = CAN_ClampS16(imu_fd_vel_z_mps * IMU_FD_LIN_VEL_SCALE);
+	gx    = CAN_ClampS16(gx_now * IMU1_ATT_CAN_SCALE_CDEG_PER_DEG);
+	gy    = CAN_ClampS16(gy_now * IMU1_ATT_CAN_SCALE_CDEG_PER_DEG);
+	gz    = CAN_ClampS16(gz_now * IMU1_ATT_CAN_SCALE_CDEG_PER_DEG);
+
+	if (imu_fd_half == 0U) {
+		/* store sample 1 and return — will send on next call */
+		imu_fd_s1_ts_us = ts_us;
+		imu_fd_s1_ax = ax_mg; imu_fd_s1_ay = ay_mg; imu_fd_s1_az = az_mg;
+		imu_fd_s1_aa = aa;    imu_fd_s1_ab = ab;    imu_fd_s1_ac = ac;
+		imu_fd_s1_vx = vx;    imu_fd_s1_vy = vy;    imu_fd_s1_vz = vz;
+		imu_fd_s1_gx = gx;    imu_fd_s1_gy = gy;    imu_fd_s1_gz = gz;
+		imu_fd_half = 1U;
+		return;
+	}
+
+	/* compute jitter: |actual_dt - expected_dt| */
+	actual_dt_us = (ts_us >= imu_fd_s1_ts_us) ?
+			(ts_us - imu_fd_s1_ts_us) : 0U;
+	expected_dt_us = (uint32_t) IMU_FD_EXPECTED_PERIOD * 100U;
+	jitter = (uint16_t) ((actual_dt_us > expected_dt_us) ?
+			((actual_dt_us - expected_dt_us) & 0xFFFFU) :
+			((expected_dt_us - actual_dt_us) & 0xFFFFU));
+
+	memset(can_tx_data, 0, sizeof(can_tx_data));
+
+	/* header */
+	CAN_PackU32LE(can_tx_data, 0U,  imu_fd_s1_ts_us);
+	can_tx_data[4] = IMU_FD_EXPECTED_PERIOD;
+	CAN_PackU16LE(can_tx_data, 5U,  error_flags);
+
+	/* sample 1 */
+	CAN_PackS16LE(can_tx_data, 7U,  imu_fd_s1_ax);
+	CAN_PackS16LE(can_tx_data, 9U,  imu_fd_s1_ay);
+	CAN_PackS16LE(can_tx_data, 11U, imu_fd_s1_az);
+	CAN_PackS16LE(can_tx_data, 13U, imu_fd_s1_aa);
+	CAN_PackS16LE(can_tx_data, 15U, imu_fd_s1_ab);
+	CAN_PackS16LE(can_tx_data, 17U, imu_fd_s1_ac);
+	CAN_PackS16LE(can_tx_data, 19U, imu_fd_s1_vx);
+	CAN_PackS16LE(can_tx_data, 21U, imu_fd_s1_vy);
+	CAN_PackS16LE(can_tx_data, 23U, imu_fd_s1_vz);
+	CAN_PackS16LE(can_tx_data, 25U, imu_fd_s1_gx);
+	CAN_PackS16LE(can_tx_data, 27U, imu_fd_s1_gy);
+	CAN_PackS16LE(can_tx_data, 29U, imu_fd_s1_gz);
+
+	/* jitter */
+	CAN_PackU16LE(can_tx_data, 31U, jitter);
+
+	/* sample 2 */
+	CAN_PackS16LE(can_tx_data, 33U, ax_mg);
+	CAN_PackS16LE(can_tx_data, 35U, ay_mg);
+	CAN_PackS16LE(can_tx_data, 37U, az_mg);
+	CAN_PackS16LE(can_tx_data, 39U, aa);
+	CAN_PackS16LE(can_tx_data, 41U, ab);
+	CAN_PackS16LE(can_tx_data, 43U, ac);
+	CAN_PackS16LE(can_tx_data, 45U, vx);
+	CAN_PackS16LE(can_tx_data, 47U, vy);
+	CAN_PackS16LE(can_tx_data, 49U, vz);
+	CAN_PackS16LE(can_tx_data, 51U, gx);
+	CAN_PackS16LE(can_tx_data, 53U, gy);
+	CAN_PackS16LE(can_tx_data, 55U, gz);
+
+	/* bytes 57-63 unused, already zeroed */
+
+	imu_fd_half = 0U;
+	(void) CAN_Send(IMU_FD_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);
+}
+
 HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan) {
 	FDCAN_FilterTypeDef sFilterConfig = { 0 };
 
@@ -407,6 +542,15 @@ HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan) {
 	last_gps_cog_timesync_tx_time = 0U;
 	last_gps_cog_data_tx_time = 0U;
 
+	last_imu_fd_tx_time  = 0U;
+	imu_fd_half          = 0U;
+	imu_fd_prev_gx_dps   = 0.0f;
+	imu_fd_prev_gy_dps   = 0.0f;
+	imu_fd_prev_gz_dps   = 0.0f;
+	imu_fd_vel_x_mps     = 0.0f;
+	imu_fd_vel_y_mps     = 0.0f;
+	imu_fd_vel_z_mps     = 0.0f;
+
 	return HAL_OK;
 }
 
@@ -416,6 +560,11 @@ void CAN_SetImuStatus(uint8_t imu_comm_ok, uint8_t imu_init_ok) {
 }
 
 void CAN_Process(uint32_t now_ms) {
+	if ((now_ms - last_imu_fd_tx_time) >= IMU_FD_TX_INTERVAL_MS) {
+		last_imu_fd_tx_time = now_ms;
+		CAN_SendImuFd(now_ms);
+	}
+
 	if ((now_ms - last_imu1_accel_tx_time) >= IMU1_ACCEL_TX_INTERVAL_MS) {
 		last_imu1_accel_tx_time = now_ms;
 		CAN_SendImuAccel();
