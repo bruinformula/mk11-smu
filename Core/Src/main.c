@@ -26,6 +26,8 @@
 #include "pps.h"
 #include "state.h"
 #include "can.h"
+#include <string.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,8 +37,14 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* #define GPS1_RST_DEBUG_HOLD */
-#define ROVER_BAUD_PROGRAM
+//#define GPS_HARD_RESET_AND_RESTOREPAR
+//#define GPS_HARD_RESET_AND_PMTK104
+/* #define GPS_HARD_RESET_AND_HALT */
+/* One-shot: write USART3=base(mode 1), USART1=rover(mode 2), persist, soft-reset.
+ * Enable for a single flash, observe BASE>$PQTMCFGRCVRMODE,OK in the log,
+ * then comment out for normal operation. */
+//#define GPS_PROGRAM_RCVR_MODES
+//#define ROVER_BAUD_PROGRAM
 #define ROVER_FACTORY_BAUD  921600U
 //#define ROVER_TARGET_BAUD   460800U
 /* USER CODE END PD */
@@ -54,6 +62,7 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_usart3_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
@@ -107,6 +116,27 @@ volatile uint32_t gps_uart_abort_count = 0U;
 volatile uint32_t gps_uart_irq_count = 0U;
 
 uint32_t last_imu_poll_time = 0U;
+
+/* Rover (USART1) DMA circular RX buffer — sized to hold ~10ms worth of bytes
+ * at 921600 baud (920 bytes) with margin. Drained every main-loop iteration. */
+#define ROVER_DMA_RX_BUF_SIZE      1024U
+#define ROVER_RTCM3_FRAME_BUF_SIZE  512U  /* largest RTCM3 frame we accumulate */
+static uint8_t rover_dma_rx_buf[ROVER_DMA_RX_BUF_SIZE];
+static uint16_t rover_dma_rx_last_pos = 0U;
+
+typedef enum {
+    RTCM3_SEEK = 0, /* hunting for 0xD3 sync                         */
+    RTCM3_HDR1,     /* got sync, waiting for length-high byte         */
+    RTCM3_HDR2,     /* got length-high, waiting for length-low byte   */
+    RTCM3_PAYLOAD   /* accumulating payload + 3 CRC bytes             */
+} Rtcm3State_t;
+
+static struct {
+    Rtcm3State_t state;
+    uint8_t  buf[ROVER_RTCM3_FRAME_BUF_SIZE];
+    uint16_t pos;      /* write index into buf[]                      */
+    uint16_t expected; /* total bytes in complete frame (payload+6)   */
+} rtcm3_parser;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -120,7 +150,9 @@ static void MX_USART3_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void Rover_FeedByte(uint8_t b);
+static void Rover_DrainDmaRx(void);
+static void Rover_DrainingDelay(uint32_t ms);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -142,6 +174,14 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 		gps_uart_error_count++;
 		gps_diag.uart_last_error_code = huart->ErrorCode;
 		(void) GPS_StartReceiveIT();
+	} else if ((huart != NULL) && (huart->Instance == USART1)) {
+		/* Rover USART1 overrun or framing error — clear and restart circular DMA RX.
+		 * Without this, HAL stops the DMA on any error and PB7 goes permanently deaf. */
+		__HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF | UART_CLEAR_FEF
+				| UART_CLEAR_NEF | UART_CLEAR_PEF);
+		huart->ErrorCode = HAL_UART_ERROR_NONE;
+		rover_dma_rx_last_pos = 0U;
+		(void) HAL_UART_Receive_DMA(huart, rover_dma_rx_buf, ROVER_DMA_RX_BUF_SIZE);
 	}
 }
 
@@ -149,6 +189,131 @@ void HAL_UART_AbortCpltCallback(UART_HandleTypeDef *huart) {
 	if ((huart != NULL) && (huart->Instance == USART3)) {
 		gps_uart_abort_count++;
 	}
+}
+
+/* ── RTCM3 frame detector for rover (USART1) stream ─────────────────────────
+ * The rover GPS outputs RTCM3 binary on UART1 TX.  Each frame is:
+ *   [0xD3][len_hi (2 bits)][len_lo][...payload (len bytes)...][crc0][crc1][crc2]
+ * Total = len + 6 bytes.  The three CRC bytes are CRC-24Q over bytes 0..len+2.
+ *
+ * We detect complete frames and emit a clean ASCII summary line per frame
+ * ("R3> 1074 127B") rather than dumping raw binary to USART2.  This avoids
+ * the 0x0A/0x0D stripping corruption that was fragmenting frames in the log. */
+
+static uint32_t Rover_Crc24q(const uint8_t *data, uint16_t len)
+{
+    uint32_t crc = 0UL;
+    for (uint16_t i = 0U; i < len; i++) {
+        crc ^= ((uint32_t)data[i]) << 16;
+        for (uint8_t bit = 0U; bit < 8U; bit++) {
+            crc <<= 1;
+            if ((crc & 0x1000000UL) != 0UL) { crc ^= 0x1864CFBUL; }
+        }
+    }
+    return crc & 0xFFFFFFUL;
+}
+
+static void Rover_OnFrame(const uint8_t *frame, uint16_t total_len)
+{
+    char line[48];
+    int  n;
+    uint16_t payload_len = total_len - 6U;
+    uint16_t msg_type    = (uint16_t)(((uint16_t)frame[3] << 4) | ((uint16_t)frame[4] >> 4));
+    uint32_t want_crc    = Rover_Crc24q(frame, total_len - 3U);
+    uint32_t got_crc     = ((uint32_t)frame[total_len - 3U] << 16)
+                         | ((uint32_t)frame[total_len - 2U] <<  8)
+                         |  (uint32_t)frame[total_len - 1U];
+
+    if (want_crc == got_crc) {
+        n = snprintf(line, sizeof(line), "R3> %u %uB\r\n", msg_type, payload_len);
+    } else {
+        n = snprintf(line, sizeof(line), "R3> CRC_ERR %uB\r\n", total_len);
+    }
+    if (n > 0) {
+        GPS_DebugMirror((const uint8_t *)line, (uint16_t)n);
+    }
+}
+
+static void Rover_FeedByte(uint8_t b)
+{
+    switch (rtcm3_parser.state) {
+    case RTCM3_SEEK:
+        if (b == 0xD3U) {
+            rtcm3_parser.pos = 0U;
+            rtcm3_parser.buf[rtcm3_parser.pos++] = b;
+            rtcm3_parser.state = RTCM3_HDR1;
+        }
+        break;
+
+    case RTCM3_HDR1:
+        /* Upper 6 bits of this byte must be zero per RTCM3 spec */
+        if ((b & 0xFCU) != 0x00U) {
+            rtcm3_parser.state = RTCM3_SEEK;
+            if (b == 0xD3U) {           /* could itself be a new sync byte */
+                rtcm3_parser.pos = 0U;
+                rtcm3_parser.buf[rtcm3_parser.pos++] = b;
+                rtcm3_parser.state = RTCM3_HDR1;
+            }
+            break;
+        }
+        rtcm3_parser.buf[rtcm3_parser.pos++] = b;
+        rtcm3_parser.state = RTCM3_HDR2;
+        break;
+
+    case RTCM3_HDR2:
+        rtcm3_parser.buf[rtcm3_parser.pos++] = b;
+        {
+            uint16_t plen = (uint16_t)(((uint16_t)(rtcm3_parser.buf[1] & 0x03U) << 8) | b);
+            rtcm3_parser.expected = plen + 6U; /* 3 header + payload + 3 CRC */
+            if (rtcm3_parser.expected > ROVER_RTCM3_FRAME_BUF_SIZE) {
+                rtcm3_parser.state = RTCM3_SEEK; /* implausibly large, reject */
+                break;
+            }
+        }
+        rtcm3_parser.state = RTCM3_PAYLOAD;
+        break;
+
+    case RTCM3_PAYLOAD:
+        if (rtcm3_parser.pos < ROVER_RTCM3_FRAME_BUF_SIZE) {
+            rtcm3_parser.buf[rtcm3_parser.pos++] = b;
+        }
+        if (rtcm3_parser.pos >= rtcm3_parser.expected) {
+            Rover_OnFrame(rtcm3_parser.buf, rtcm3_parser.expected);
+            rtcm3_parser.state = RTCM3_SEEK;
+        }
+        break;
+
+    default:
+        rtcm3_parser.state = RTCM3_SEEK;
+        break;
+    }
+}
+
+/* Drain whatever bytes have accumulated in the rover (USART1) circular DMA
+ * RX buffer through the RTCM3 frame detector. Safe to call from anywhere
+ * (boot init, polling-delay loops, main loop). */
+static void Rover_DrainDmaRx(void)
+{
+    uint16_t dma_pos = (uint16_t)(ROVER_DMA_RX_BUF_SIZE
+            - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx));
+    if (dma_pos >= ROVER_DMA_RX_BUF_SIZE) { dma_pos = 0U; }
+    while (rover_dma_rx_last_pos != dma_pos) {
+        uint8_t b = rover_dma_rx_buf[rover_dma_rx_last_pos];
+        rover_dma_rx_last_pos = (uint16_t)((rover_dma_rx_last_pos + 1U)
+                % ROVER_DMA_RX_BUF_SIZE);
+        Rover_FeedByte(b);
+    }
+}
+
+/* Like HAL_Delay, but keeps the rover DMA RX buffer drained the whole time
+ * so a long wait can't silently overrun the 512-byte circular buffer (which
+ * fills in ~5 ms at 921600 baud). */
+static void Rover_DrainingDelay(uint32_t ms)
+{
+    uint32_t start = HAL_GetTick();
+    while ((HAL_GetTick() - start) < ms) {
+        Rover_DrainDmaRx();
+    }
 }
 /* USER CODE END 0 */
 
@@ -189,6 +354,74 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+#ifdef GPS_HARD_RESET_AND_HALT
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_RESET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET); */ /* PB1 trace cut, pin is analog */
+  HAL_Delay(150U);
+
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET); */ /* PB1 trace cut, pin is analog */
+
+  while (1) {
+    gps_mode_pin_state = (uint8_t)HAL_GPIO_ReadPin(BASE_RST_GPIO_Port,
+        BASE_RST_Pin);
+  }
+#elif defined(GPS_HARD_RESET_AND_RESTOREPAR)
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_RESET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET); */ /* PB1 trace cut, pin is analog */
+  HAL_Delay(150U);
+
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET); */ /* PB1 trace cut, pin is analog */
+  HAL_Delay(100U);
+
+  static const char restore_cmd[] = "$PQTMRESTOREPAR*13\r\n";
+	static const char rover_save_cmd[] = "$PQTMSAVEPAR*5A\r\n";
+
+  HAL_UART_Transmit(&huart3, (uint8_t *)restore_cmd, (uint16_t)(sizeof(restore_cmd) - 1U), 100U);
+
+  HAL_Delay(100);
+  HAL_UART_Transmit(&huart3, (uint8_t *)rover_save_cmd, (uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
+
+  while (1) {
+    gps_mode_pin_state = (uint8_t)HAL_GPIO_ReadPin(BASE_RST_GPIO_Port, BASE_RST_Pin);
+  }
+#elif defined(GPS_HARD_RESET_AND_PMTK104)
+  /* PMTK/PAIR-family factory reset variant. $PMTK104 is MTK's "full cold start"
+   * which also wipes user-saved config. Use this if PQTMRESTOREPAR doesn't take.
+   * NOTE: after a full factory reset the module's UART baud reverts to factory
+   * default (typically 460800). If you're at 921600 you'll need to either send
+   * the command at both baud rates or accept losing comms until reprogramming. */
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_RESET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET); */ /* PB1 trace cut, pin is analog */
+  HAL_Delay(150U);
+
+  HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
+  /* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET); */ /* PB1 trace cut, pin is analog */
+  HAL_Delay(100U);
+
+  static const char pmtk_full_cold[] = "$PMTK104*37\r\n";
+  static const char pmtk_save_cmd[]  = "$PQTMSAVEPAR*5A\r\n";
+
+  /* Fire at current baud (921600) */
+  HAL_UART_Transmit(&huart3, (uint8_t *)pmtk_full_cold,
+      (uint16_t)(sizeof(pmtk_full_cold) - 1U), 100U);
+  HAL_Delay(100U);
+
+  /* Then re-init huart3 at factory 460800 and resend, in case the module already
+   * sits at factory baud or jumps there mid-command. */
+  huart3.Init.BaudRate = 460800U;
+  (void)HAL_UART_Init(&huart3);
+  HAL_UART_Transmit(&huart3, (uint8_t *)pmtk_full_cold,
+      (uint16_t)(sizeof(pmtk_full_cold) - 1U), 100U);
+  HAL_Delay(100U);
+  HAL_UART_Transmit(&huart3, (uint8_t *)pmtk_save_cmd,
+      (uint16_t)(sizeof(pmtk_save_cmd) - 1U), 100U);
+
+  while (1) {
+    gps_mode_pin_state = (uint8_t)HAL_GPIO_ReadPin(BASE_RST_GPIO_Port, BASE_RST_Pin);
+  }
+#else
 #ifdef ROVER_BAUD_PROGRAM
 	/* Step 1: All peripherals initialised above.
      Step 2: BASE_RST is LOW (held in reset by GPIO init).
@@ -336,12 +569,12 @@ int main(void)
 			//        HAL_Delay(1000U);
 
 			/* Step 4: Pull ROVER reset LOW */
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET);
+			/* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET); */ /* PB1 trace cut, pin is analog */
 			HAL_Delay(150U);
 
 			/* Step 5: Release BASE and ROVER reset simultaneously */
 			HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
+			/* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET); */ /* PB1 trace cut, pin is analog */
 
 			/* G for both modules to complete boot */
 			HAL_Delay(5000U);
@@ -349,7 +582,7 @@ int main(void)
 #else /* !ROVER_BAUD_PROGRAM */
 			/* Rover already at 921600 — just release both resets */
 			HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
+			/* HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET); */ /* PB1 trace cut, pin is analog */
 			HAL_Delay(5000U);
 #endif /* ROVER_BAUD_PROGRAM */
 
@@ -367,6 +600,23 @@ int main(void)
 				gps_init_ok = 1U;
 			} else {
 				gps_init_ok = 0U;
+			}
+
+			/* Rover (USART1) - passive monitor only.
+			 *
+			 * The base GPS UART2 TX is wired to the same line as rover RX1 and
+			 * STM32 PB6 (USART1 TX). The base firmware already drives RTCM
+			 * corrections to the rover on that line; sending additional commands
+			 * from the STM32 causes bus contention. So here we only arm
+			 * circular DMA RX on USART1 so PB7 (rover TX1 / base RX2) is
+			 * captured to the debug stream. The MCU never transmits on PB6. */
+			{
+				/* Arm DMA RX; do not transmit anything on huart1. */
+				__HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_OREF | UART_CLEAR_FEF
+						| UART_CLEAR_NEF | UART_CLEAR_PEF);
+				huart1.ErrorCode = HAL_UART_ERROR_NONE;
+				rover_dma_rx_last_pos = 0U;
+				(void)HAL_UART_Receive_DMA(&huart1, rover_dma_rx_buf, ROVER_DMA_RX_BUF_SIZE);
 			}
 
 //			if (GPS_StartReceiveIT() == HAL_OK) {
@@ -396,6 +646,70 @@ int main(void)
 			//	HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
 			//	gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(ROVER_RST_GPIO_Port,
 			//			ROVER_RST_Pin);
+#endif /* GPS_HARD_RESET_AND_HALT */
+
+			/* One-shot huart1 register dump so the host log shows the actual
+			 * peripheral state after rover programming finished. Reveals RE,
+			 * FIFO, BRR, and stuck ISR error flags at a glance. */
+			{
+				char dbg[160];
+				int n = snprintf(dbg, sizeof(dbg),
+					"\r\nU1_DIAG CR1=%08lX CR2=%08lX CR3=%08lX BRR=%08lX ISR=%08lX PB7_IDR=%u BR=%lu\r\n",
+					(unsigned long)huart1.Instance->CR1,
+					(unsigned long)huart1.Instance->CR2,
+					(unsigned long)huart1.Instance->CR3,
+					(unsigned long)huart1.Instance->BRR,
+					(unsigned long)huart1.Instance->ISR,
+					(unsigned)HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7),
+					(unsigned long)huart1.Init.BaudRate);
+				if (n > 0) {
+					GPS_DebugMirror((const uint8_t *)dbg, (uint16_t)n);
+				}
+			}
+
+#ifdef GPS_PROGRAM_RCVR_MODES
+			/* One-shot receiver-mode programming.
+			 *   USART3 device  → mode 1 (RTK Base Station, emits RTCM3)
+			 *   USART1 device  → mode 2 (Moving-Baseline Rover, emits PQTMTAR/PQTMVEHATT)
+			 * Runs AFTER normal init so BASE_RST has been released and DMA RX
+			 * is armed on huart1 (otherwise the rover's reboot burst would
+			 * overrun the UART and CR3.DMAR never gets set).
+			 * After a successful flash + observe of acks in the log, comment
+			 * out the define near the top of this file and reflash. Settings
+			 * persist on each module's internal flash via PQTMSAVEPAR. */
+			{
+				static const char set_mode_base [] = "$PQTMCFGRCVRMODE,W,1*2A\r\n";
+				static const char set_mode_rover[] = "$PQTMCFGRCVRMODE,W,2*29\r\n";
+				static const char savepar       [] = "$PQTMSAVEPAR*5A\r\n";
+				static const char srr           [] = "$PQTMSRR*4B\r\n";
+
+				/* USART3 → base (mode 1) */
+				HAL_UART_Transmit(&huart3, (uint8_t *)set_mode_base,
+					(uint16_t)(sizeof(set_mode_base) - 1U), 100U);
+				Rover_DrainingDelay(300U);
+				HAL_UART_Transmit(&huart3, (uint8_t *)savepar,
+					(uint16_t)(sizeof(savepar) - 1U), 100U);
+				Rover_DrainingDelay(300U);
+
+				/* USART1 → rover (mode 2) */
+				HAL_UART_Transmit(&huart1, (uint8_t *)set_mode_rover,
+					(uint16_t)(sizeof(set_mode_rover) - 1U), 100U);
+				Rover_DrainingDelay(300U);
+				HAL_UART_Transmit(&huart1, (uint8_t *)savepar,
+					(uint16_t)(sizeof(savepar) - 1U), 100U);
+				Rover_DrainingDelay(300U);
+
+				/* Soft-reset both so the new mode is loaded fresh. DMA RX is
+				 * already armed on huart1, so the rover's reboot burst gets
+				 * captured cleanly. */
+				HAL_UART_Transmit(&huart3, (uint8_t *)srr,
+					(uint16_t)(sizeof(srr) - 1U), 100U);
+				HAL_UART_Transmit(&huart1, (uint8_t *)srr,
+					(uint16_t)(sizeof(srr) - 1U), 100U);
+
+				Rover_DrainingDelay(2500U);
+			}
+#endif /* GPS_PROGRAM_RCVR_MODES */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -408,6 +722,23 @@ int main(void)
 
 				PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
 				GPS_Process();
+
+				/* Rover (huart1) RX mirror \u2014 drain RXNE byte-by-byte into the
+				 * USART2 debug stream so the host log shows whatever the rover
+				 * is emitting. Each new line gets an "R> " prefix so it's
+				 * trivially distinguishable from base traffic. Non-blocking
+				 * flag poll; no impact on timing budget. */
+				/* Rover (USART1) DMA RX drain - forward new bytes from the
+				 * circular DMA buffer to the USART2 debug stream, prefixing
+				 * each new line with "R> " so rover traffic is distinguishable
+				 * from base traffic. Handles DMA wrap-around correctly. */
+#ifndef DEBUG_MIRROR_BASE_ONLY
+				/* Feed each new byte from the rover DMA buffer through the
+				 * RTCM3 frame detector.  Complete, CRC-valid frames are
+				 * reported as a single ASCII line ("R3> 1074 127B") so no
+				 * 0x0A/0x0D bytes inside RTCM binary ever reach USART2. */
+				Rover_DrainDmaRx();
+#endif /* DEBUG_MIRROR_BASE_ONLY */
 
 				if ((now - last_imu_poll_time) >= 10U) {
 					last_imu_poll_time = now;
@@ -765,6 +1096,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 
 }
 
@@ -789,7 +1123,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|BASE_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(BASE_WKUP_GPIO_Port, BASE_WKUP_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  /* HAL_GPIO_WritePin(ROVER_WKUP_GPIO_Port, ROVER_WKUP_Pin, GPIO_PIN_SET); */ /* rover wakeup unused */
 
   /*Configure GPIO pin : IMU_CS_Pin */
   GPIO_InitStruct.Pin = IMU_CS_Pin;
@@ -798,12 +1135,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(IMU_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : ROVER_RST_Pin */
-  GPIO_InitStruct.Pin = ROVER_RST_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  /*Configure GPIO pin : PB1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(ROVER_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : BASE_RST_Pin */
   GPIO_InitStruct.Pin = BASE_RST_Pin;
@@ -817,6 +1153,22 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(BASE_1PPS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BASE_WKUP_Pin */
+  GPIO_InitStruct.Pin = BASE_WKUP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(BASE_WKUP_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : ROVER_WKUP_Pin */
+  /* rover wakeup unused
+  GPIO_InitStruct.Pin = ROVER_WKUP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(ROVER_WKUP_GPIO_Port, &GPIO_InitStruct);
+  */
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

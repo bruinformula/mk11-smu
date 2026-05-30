@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-NMEA_SENTENCE_RE = re.compile(r"\$[A-Z0-9]{5},[^\r\n$]{0,160}?\*[0-9A-Fa-f]{2}")
+NMEA_SENTENCE_RE = re.compile(r"\$[A-Z0-9]{2,20},[^\r\n$]{0,200}?\*[0-9A-Fa-f]{2}")
 GGA_FRAGMENT_RE = re.compile(
     r"(?P<time>\d{3,6}\.\d+),(?P<lat>\d{4,5}\.\d+),(?P<lat_hemi>[NS]),"
     r"(?P<lon>\d{5,6}\.\d+),(?P<lon_hemi>[EW]),(?P<quality>\d),"
@@ -22,7 +22,50 @@ GGA_FRAGMENT_RE = re.compile(
 RMC_TYPES = {"GNRMC", "GPRMC", "GARMC", "GLRMC", "GBRMC", "GQRMC"}
 GSV_TYPES = {"GPGSV", "GLGSV", "GAGSV", "GBGSV", "GQGSV", "GNGSV"}
 GSA_TYPES = {"GNGSA", "GPGSA", "GLGSA", "GAGSA", "GBGSA", "GQGSA"}
+PQTM_VEHATT_TYPE = "PQTMVEHATT"
+PQTM_TAR_TYPE = "PQTMTAR"
 KNOTS_TO_MPS = 0.514444
+
+# RTCM3 message type registry
+RTCM3_MSG_NAMES: dict[int, str] = {
+    1001: "GPS L1 RTK",
+    1002: "GPS L1 RTK Ext",
+    1003: "GPS L1/L2 RTK",
+    1004: "GPS L1/L2 RTK Ext",
+    1005: "Ref Station XYZ",
+    1006: "Ref Station XYZ+H",
+    1007: "Antenna Descriptor",
+    1008: "Antenna Serial",
+    1009: "GLONASS L1 RTK",
+    1010: "GLONASS L1 RTK Ext",
+    1011: "GLONASS L1/L2 RTK",
+    1012: "GLONASS L1/L2 RTK Ext",
+    1019: "GPS Ephemeris",
+    1020: "GLONASS Ephemeris",
+    1033: "Rcvr/Antenna Desc",
+    1074: "GPS MSM4",
+    1075: "GPS MSM5",
+    1076: "GPS MSM6",
+    1077: "GPS MSM7",
+    1084: "GLONASS MSM4",
+    1085: "GLONASS MSM5",
+    1086: "GLONASS MSM6",
+    1087: "GLONASS MSM7",
+    1094: "Galileo MSM4",
+    1095: "Galileo MSM5",
+    1096: "Galileo MSM6",
+    1097: "Galileo MSM7",
+    1114: "QZSS MSM4",
+    1115: "QZSS MSM5",
+    1116: "QZSS MSM6",
+    1117: "QZSS MSM7",
+    1124: "BeiDou MSM4",
+    1125: "BeiDou MSM5",
+    1126: "BeiDou MSM6",
+    1127: "BeiDou MSM7",
+    1230: "GLONASS Code-Phase Biases",
+    4072: "Quectel Proprietary",
+}
 LOCK_QUALITY_LABELS = {
     0: "Invalid",
     1: "GPS fix",
@@ -80,6 +123,28 @@ class GsvTalkerState:
     total_messages: int
     total_satellites: int
     parts: dict[int, list[float]]
+
+
+@dataclass
+class PqtmVehattReading:
+    tow_ms: Optional[float]
+    roll_deg: Optional[float]
+    pitch_deg: Optional[float]
+    heading_deg: Optional[float]
+    vel_north_mps: Optional[float]
+    vel_east_mps: Optional[float]
+    vel_down_mps: Optional[float]
+
+
+@dataclass
+class PqtmTarReading:
+    utc_time: Optional[str]
+    quality: Optional[int]
+    heading_deg: Optional[float]
+    pitch_deg: Optional[float]
+    roll_deg: Optional[float]
+    horiz_dist_m: Optional[float]
+    vert_dist_m: Optional[float]
 
 
 def validate_checksum(sentence: str) -> bool:
@@ -366,6 +431,149 @@ def add_motion_metrics(points: list[TrackPoint]) -> None:
             )
 
 
+def parse_pqtmvehatt(sentence: str) -> Optional[PqtmVehattReading]:
+    """Parse $PQTMVEHATT sentence: MsgVer,TOW_ms,Roll,Pitch,Heading,VelN,VelE,VelD"""
+    body = sentence[1:].split("*", 1)[0]
+    fields = body.split(",")
+    if len(fields) < 3:
+        return None
+    return PqtmVehattReading(
+        tow_ms=parse_float(fields[2]) if len(fields) > 2 else None,
+        roll_deg=parse_float(fields[3]) if len(fields) > 3 else None,
+        pitch_deg=parse_float(fields[4]) if len(fields) > 4 else None,
+        heading_deg=parse_float(fields[5]) if len(fields) > 5 else None,
+        vel_north_mps=parse_float(fields[6]) if len(fields) > 6 else None,
+        vel_east_mps=parse_float(fields[7]) if len(fields) > 7 else None,
+        vel_down_mps=parse_float(fields[8]) if len(fields) > 8 else None,
+    )
+
+
+def parse_pqtmtar(sentence: str) -> Optional[PqtmTarReading]:
+    """Parse $PQTMTAR sentence: MsgVer,UTC,Quality,Heading,Pitch,Roll,HorizDist,VertDist,..."""
+    body = sentence[1:].split("*", 1)[0]
+    fields = body.split(",")
+    if len(fields) < 3:
+        return None
+    return PqtmTarReading(
+        utc_time=fields[2] if len(fields) > 2 and fields[2] else None,
+        quality=parse_int(fields[3]) if len(fields) > 3 else None,
+        heading_deg=parse_float(fields[4]) if len(fields) > 4 else None,
+        pitch_deg=parse_float(fields[5]) if len(fields) > 5 else None,
+        roll_deg=parse_float(fields[6]) if len(fields) > 6 else None,
+        horiz_dist_m=parse_float(fields[7]) if len(fields) > 7 else None,
+        vert_dist_m=parse_float(fields[8]) if len(fields) > 8 else None,
+    )
+
+
+def crc24q(data: bytes) -> int:
+    """CRC-24Q checksum used by RTCM3."""
+    crc = 0
+    for byte in data:
+        crc ^= byte << 16
+        for _ in range(8):
+            crc <<= 1
+            if crc & 0x1000000:
+                crc ^= 0x1864CFB
+    return crc & 0xFFFFFF
+
+
+def parse_rtcm3_frames(data: bytes) -> dict:
+    """Scan a byte buffer for RTCM3 frames and return stats."""
+    frames: list[dict] = []
+    crc_errors = 0
+    i = 0
+    total = len(data)
+
+    while i < total - 5:
+        if data[i] != 0xD3:
+            i += 1
+            continue
+
+        if i + 2 >= total:
+            break
+
+        # 10-bit payload length encoded in lower 2 bits of byte 1 + all of byte 2
+        length = ((data[i + 1] & 0x03) << 8) | data[i + 2]
+        frame_end = i + 3 + length + 3
+
+        if length > 1023 or frame_end > total:
+            i += 1
+            continue
+
+        frame = data[i:frame_end]
+        if crc24q(frame[:-3]) != (frame[-3] << 16) | (frame[-2] << 8) | frame[-1]:
+            crc_errors += 1
+            i += 1
+            continue
+
+        msg_type = ((frame[3] << 4) | (frame[4] >> 4)) if length >= 2 else -1
+        frames.append({
+            "offset": i,
+            "length": length,
+            "message_type": msg_type,
+            "message_type_name": RTCM3_MSG_NAMES.get(msg_type, f"Unknown ({msg_type})"),
+        })
+        i = frame_end
+
+    type_counts: Counter[int] = Counter(f["message_type"] for f in frames)
+    return {
+        "frame_count": len(frames),
+        "crc_error_count": crc_errors,
+        "total_bytes": len(data),
+        "message_type_counts": {
+            str(msg_type): {
+                "count": count,
+                "name": RTCM3_MSG_NAMES.get(msg_type, f"Unknown ({msg_type})"),
+            }
+            for msg_type, count in sorted(type_counts.items())
+        },
+    }
+
+
+def parse_rtcm3_text_log(entries: list[str]) -> dict:
+    """Parse R3> ASCII summary lines emitted by the firmware RTCM3 frame detector.
+
+    Each entry is the portion after the 'R3> ' prefix, e.g. '1074 127B' or 'CRC_ERR 134B'.
+    Returns the same dict shape as parse_rtcm3_frames so the renderer doesn't need to change.
+    """
+    import re
+    frame_count = 0
+    crc_errors = 0
+    total_bytes = 0
+    type_counts: Counter[int] = Counter()
+
+    valid_re = re.compile(r'^(\d+)\s+(\d+)B$')
+    crc_re = re.compile(r'^CRC_ERR\s+(\d+)B$')
+
+    for entry in entries:
+        m = valid_re.match(entry)
+        if m:
+            frame_count += 1
+            msg_type = int(m.group(1))
+            payload_len = int(m.group(2))
+            total_bytes += payload_len + 6  # payload + 3 header + 3 CRC
+            type_counts[msg_type] += 1
+            continue
+        m = crc_re.match(entry)
+        if m:
+            crc_errors += 1
+            total_bytes += int(m.group(1))
+
+    return {
+        "frame_count": frame_count,
+        "crc_error_count": crc_errors,
+        "total_bytes": total_bytes,
+        "message_type_counts": {
+            str(msg_type): {
+                "count": count,
+                "name": RTCM3_MSG_NAMES.get(msg_type, f"Unknown ({msg_type})"),
+            }
+            for msg_type, count in sorted(type_counts.items())
+        },
+    }
+
+
+
 def parse_rmc_sentence(sentence: str) -> Optional[TrackPoint]:
     body = sentence[1:].split("*", 1)[0]
     fields = body.split(",")
@@ -549,8 +757,30 @@ def build_report(input_path: Path) -> dict:
     points: list[TrackPoint] = []
     quality_context = QualityContext()
     talker_cycles: dict[str, GsvTalkerState] = {}
+    vehatt_readings: list[PqtmVehattReading] = []
+    tar_readings: list[PqtmTarReading] = []
+    rtcm_chunks: list[bytes] = []
+    rtcm3_text_entries: list[str] = []  # R3> lines from new firmware
 
     for line in decoded.splitlines():
+        # New firmware: RTCM3 frame detector emits ASCII summaries "R3> 1074 127B"
+        if line.startswith("R3> "):
+            rtcm3_text_entries.append(line[4:].strip())
+            continue
+
+        # Old firmware: raw RTCM binary bytes mirrored with "R> " prefix
+        if line.startswith("R> "):
+            rtcm_chunks.append(line[3:].encode("latin-1"))
+            continue
+
+        # Skip STM32 diagnostic / transmit lines
+        if line.startswith("TX> ") or line.startswith("U1_DIAG"):
+            continue
+
+        # Strip STM32 base-mirror prefix if present
+        if line.startswith("BASE > "):
+            line = line[7:]
+
         gga_fragment = parse_gga_fragment(line)
         if gga_fragment is not None:
             quality_context.lock_quality = gga_fragment["lock_quality"]
@@ -563,8 +793,21 @@ def build_report(input_path: Path) -> dict:
         invalid_checksum_count += line_invalid_count
 
         for sentence in line_sentences:
-            sentence_type = sentence[1:6]
+            comma = sentence.find(",")
+            sentence_type = sentence[1:comma] if comma != -1 else sentence[1:]
             sentence_counts[sentence_type] += 1
+
+            if sentence_type == PQTM_VEHATT_TYPE:
+                reading = parse_pqtmvehatt(sentence)
+                if reading is not None:
+                    vehatt_readings.append(reading)
+                continue
+
+            if sentence_type == PQTM_TAR_TYPE:
+                reading = parse_pqtmtar(sentence)
+                if reading is not None:
+                    tar_readings.append(reading)
+                continue
 
             if sentence_type in GSV_TYPES:
                 gsv_data = parse_gsv_sentence(sentence)
@@ -612,6 +855,33 @@ def build_report(input_path: Path) -> dict:
 
     first_fix, last_fix, bounds, distance_meters = summarize_points(points)
 
+    # RTCM3 analysis — prefer new-firmware ASCII R3> entries; fall back to old raw R> binary
+    rtcm_data: Optional[dict] = None
+    if rtcm3_text_entries:
+        rtcm_data = parse_rtcm3_text_log(rtcm3_text_entries)
+        rtcm_data["entry_count"] = len(rtcm3_text_entries)
+    elif rtcm_chunks:
+        rtcm_data = parse_rtcm3_frames(b"".join(rtcm_chunks))
+        rtcm_data["chunk_count"] = len(rtcm_chunks)
+
+    # PQTM summary
+    tar_quality_counts = {0: 0, 1: 0, 2: 0}
+    for r in tar_readings:
+        if r.quality in tar_quality_counts:
+            tar_quality_counts[r.quality] += 1
+    heading_samples = [r.heading_deg for r in vehatt_readings if r.heading_deg is not None]
+    pqtm_data = {
+        "vehatt_count": len(vehatt_readings),
+        "tar_count": len(tar_readings),
+        "tar_no_fix_count": tar_quality_counts[0],
+        "tar_float_count": tar_quality_counts[1],
+        "tar_fixed_count": tar_quality_counts[2],
+        "latest_vehatt": asdict(vehatt_readings[-1]) if vehatt_readings else None,
+        "latest_tar": asdict(tar_readings[-1]) if tar_readings else None,
+        "heading_min": round(min(heading_samples), 3) if heading_samples else None,
+        "heading_max": round(max(heading_samples), 3) if heading_samples else None,
+    }
+
     return {
         "inputPath": str(input_path.resolve()),
         "sourceName": input_path.name,
@@ -627,6 +897,8 @@ def build_report(input_path: Path) -> dict:
         "distanceKilometers": round(distance_meters / 1000.0, 3),
         "points": [asdict(point) for point in points],
         "geojson": build_geojson(points, input_path.name),
+        "pqtmData": pqtm_data,
+        "rtcmData": rtcm_data,
     }
 
 

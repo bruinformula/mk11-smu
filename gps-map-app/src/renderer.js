@@ -80,6 +80,20 @@ const elements = {
   pointDetailSummary: document.getElementById('point-detail-summary'),
   pointRadarChart: document.getElementById('point-radar-chart'),
   pointRadarValues: document.getElementById('point-radar-values'),
+  // PQTM / RTCM elements
+  pqtmRtkChip: document.getElementById('pqtm-rtk-chip'),
+  pqtmVehattCount: document.getElementById('pqtm-vehatt-count'),
+  pqtmTarCount: document.getElementById('pqtm-tar-count'),
+  pqtmTarFixed: document.getElementById('pqtm-tar-fixed'),
+  pqtmTarFloat: document.getElementById('pqtm-tar-float'),
+  pqtmHeading: document.getElementById('pqtm-heading'),
+  pqtmRollPitch: document.getElementById('pqtm-roll-pitch'),
+  pqtmDist: document.getElementById('pqtm-dist'),
+  rtcmChip: document.getElementById('rtcm-chip'),
+  rtcmFrameCount: document.getElementById('rtcm-frame-count'),
+  rtcmCrcErrors: document.getElementById('rtcm-crc-errors'),
+  rtcmBytes: document.getElementById('rtcm-bytes'),
+  rtcmMsgTypes: document.getElementById('rtcm-msg-types'),
 };
 
 const overlayDefinitions = {
@@ -2089,12 +2103,107 @@ function renderMap(report) {
   );
 }
 
+const RTK_QUALITY_LABELS = { 0: 'No fix', 1: 'Float', 2: 'Fixed' };
+
+function renderPqtmData(pqtmData) {
+  if (!pqtmData) {
+    elements.pqtmRtkChip.textContent = 'No data';
+    elements.pqtmRtkChip.className = 'chip muted';
+    elements.pqtmVehattCount.textContent = '-';
+    elements.pqtmTarCount.textContent = '-';
+    elements.pqtmTarFixed.textContent = '-';
+    elements.pqtmTarFloat.textContent = '-';
+    elements.pqtmHeading.textContent = '-';
+    elements.pqtmRollPitch.textContent = '-';
+    elements.pqtmDist.textContent = '-';
+    return;
+  }
+
+  const fixedCount = pqtmData.tar_fixed_count || 0;
+  const floatCount = pqtmData.tar_float_count || 0;
+  if (fixedCount > 0) {
+    elements.pqtmRtkChip.textContent = 'RTK fixed';
+    elements.pqtmRtkChip.className = 'chip';
+  } else if (floatCount > 0) {
+    elements.pqtmRtkChip.textContent = 'RTK float';
+    elements.pqtmRtkChip.className = 'chip muted';
+  } else {
+    elements.pqtmRtkChip.textContent = 'No RTK lock';
+    elements.pqtmRtkChip.className = 'chip muted';
+  }
+
+  elements.pqtmVehattCount.textContent = formatNumber(pqtmData.vehatt_count || 0);
+  elements.pqtmTarCount.textContent = formatNumber(pqtmData.tar_count || 0);
+  elements.pqtmTarFixed.textContent = formatNumber(fixedCount);
+  elements.pqtmTarFloat.textContent = formatNumber(floatCount);
+
+  const vehatt = pqtmData.latest_vehatt;
+  if (vehatt && vehatt.heading_deg != null) {
+    elements.pqtmHeading.textContent = `${formatNumber(vehatt.heading_deg, 2)}°`;
+  } else {
+    elements.pqtmHeading.textContent = '--';
+  }
+
+  if (vehatt && (vehatt.roll_deg != null || vehatt.pitch_deg != null)) {
+    const roll = vehatt.roll_deg != null ? `${formatNumber(vehatt.roll_deg, 2)}°` : '--';
+    const pitch = vehatt.pitch_deg != null ? `${formatNumber(vehatt.pitch_deg, 2)}°` : '--';
+    elements.pqtmRollPitch.textContent = `${roll} / ${pitch}`;
+  } else {
+    elements.pqtmRollPitch.textContent = '--';
+  }
+
+  const tar = pqtmData.latest_tar;
+  if (tar && tar.horiz_dist_m != null) {
+    elements.pqtmDist.textContent = `${formatNumber(tar.horiz_dist_m, 3)} m`;
+  } else {
+    elements.pqtmDist.textContent = '--';
+  }
+}
+
+function renderRtcmData(rtcmData) {
+  if (!rtcmData) {
+    elements.rtcmChip.textContent = 'No data';
+    elements.rtcmChip.className = 'chip muted';
+    elements.rtcmFrameCount.textContent = '-';
+    elements.rtcmCrcErrors.textContent = '-';
+    elements.rtcmBytes.textContent = '-';
+    elements.rtcmMsgTypes.innerHTML = '<div class="sentence-item"><strong>None</strong><span>No R&gt; rover lines found.</span></div>';
+    return;
+  }
+
+  const frameCount = rtcmData.frame_count || 0;
+  elements.rtcmChip.textContent = `${formatNumber(frameCount)} frames`;
+  elements.rtcmChip.className = frameCount > 0 ? 'chip' : 'chip muted';
+  elements.rtcmFrameCount.textContent = formatNumber(frameCount);
+  elements.rtcmCrcErrors.textContent = formatNumber(rtcmData.crc_error_count || 0);
+  elements.rtcmBytes.textContent = `${formatNumber(rtcmData.total_bytes || 0)} B`;
+
+  const typeCounts = rtcmData.message_type_counts || {};
+  const entries = Object.entries(typeCounts);
+  if (!entries.length) {
+    elements.rtcmMsgTypes.innerHTML = '<div class="sentence-item"><strong>No valid frames</strong><span>Sync bytes found but no valid RTCM3 frames decoded.</span></div>';
+    return;
+  }
+
+  elements.rtcmMsgTypes.innerHTML = entries
+    .sort(([, a], [, b]) => b.count - a.count)
+    .map(([msgType, info]) => `
+      <div class="sentence-item">
+        <strong>${escapeHtml(String(msgType))} — ${escapeHtml(info.name)}</strong>
+        <span>${formatNumber(info.count)} frames</span>
+      </div>
+    `)
+    .join('');
+}
+
 function renderReport(report) {
   state.currentReport = report;
   state.currentFilePath = report.inputPath;
   elements.selectedFile.textContent = report.inputPath;
   resetLapAnalysisForReport(report);
   renderSummary(report);
+  renderPqtmData(report.pqtmData || null);
+  renderRtcmData(report.rtcmData || null);
   renderMap(report);
   setBusy(false);
 }

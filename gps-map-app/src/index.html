@@ -202,6 +202,65 @@
             </div>
             <div id="sentence-counts" class="sentence-list"></div>
           </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>PQTM / Attitude</h2>
+              <span id="pqtm-rtk-chip" class="chip muted">No data</span>
+            </div>
+            <dl class="detail-grid" id="pqtm-grid">
+              <div>
+                <dt>PQTMVEHATT frames</dt>
+                <dd id="pqtm-vehatt-count">-</dd>
+              </div>
+              <div>
+                <dt>PQTMTAR frames</dt>
+                <dd id="pqtm-tar-count">-</dd>
+              </div>
+              <div>
+                <dt>RTK fixed epochs</dt>
+                <dd id="pqtm-tar-fixed">-</dd>
+              </div>
+              <div>
+                <dt>RTK float epochs</dt>
+                <dd id="pqtm-tar-float">-</dd>
+              </div>
+              <div>
+                <dt>Latest heading</dt>
+                <dd id="pqtm-heading">-</dd>
+              </div>
+              <div>
+                <dt>Latest roll / pitch</dt>
+                <dd id="pqtm-roll-pitch">-</dd>
+              </div>
+              <div>
+                <dt>Baseline distance</dt>
+                <dd id="pqtm-dist">-</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="detail-card">
+            <div class="detail-card-header">
+              <h2>RTCM3 (rover stream)</h2>
+              <span id="rtcm-chip" class="chip muted">No data</span>
+            </div>
+            <dl class="detail-grid">
+              <div>
+                <dt>Frames decoded</dt>
+                <dd id="rtcm-frame-count">-</dd>
+              </div>
+              <div>
+                <dt>CRC errors</dt>
+                <dd id="rtcm-crc-errors">-</dd>
+              </div>
+              <div>
+                <dt>Raw bytes</dt>
+                <dd id="rtcm-bytes">-</dd>
+              </div>
+            </dl>
+            <div id="rtcm-msg-types" class="sentence-list"></div>
+          </section>
         </div>
 
         <section class="detail-card status-card">

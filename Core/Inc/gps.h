@@ -51,12 +51,14 @@ typedef struct {
 	uint32_t start_receive_calls;
 	uint32_t uart_cr1_after_start;
 	uint32_t uart_cr3_after_start;
+	uint32_t transport_preflight_mask;
 	uint32_t uart_poll_rxne_count;
 	uint32_t uart_poll_error_count;
 	uint32_t active_baud_rate;
 	uint32_t detected_baud_rate;
 	uint32_t baud_switch_count;
 	uint8_t baud_locked;
+	uint8_t transport_preflight_ok;
 	uint8_t baud_candidate_index;
 	uint32_t config_command_count;
 	uint8_t config_command_status;
@@ -77,6 +79,8 @@ typedef struct {
 
 extern volatile GPS_Data_t gps_data;
 extern volatile GPS_Diag_t gps_diag;
+extern volatile uint32_t gps_init_stage_debug;
+extern volatile uint32_t gps_init_retry_count_debug;
 
 HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart);
 HAL_StatusTypeDef GPS_StartReceiveIT(void);
@@ -84,6 +88,28 @@ void GPS_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart);
 void GPS_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 void GPS_UART_TxCpltCallback(UART_HandleTypeDef *huart);
 void GPS_Process(void);
+
+/* Public USART2 debug mirror — forwards arbitrary bytes into the same queued
+ * USART2 stream the GPS driver uses, so callers outside gps.c can interleave
+ * diagnostic data without racing the DMA TX path. */
+void GPS_DebugMirror(const uint8_t *data, uint16_t len);
+
+/* --- Debug mirror mode ---------------------------------------------------
+ * Uncomment exactly ONE of the two defines below to restrict what is
+ * forwarded to the USART2 debug stream.  Leave both commented to mirror
+ * both USART3 (base GPS) and USART1 (rover) simultaneously (default).
+ *
+ *   DEBUG_MIRROR_BASE_ONLY   — only USART3 raw bytes reach USART2;
+ *                              the rover R> drain in the main loop is
+ *                              suppressed.
+ *
+ *   DEBUG_MIRROR_ROVER_ONLY  — only the USART1 rover R> stream reaches
+ *                              USART2; the USART3 raw-mirror inside
+ *                              GPS_DrainRxDma is suppressed (parsed
+ *                              sentence fields still update gps_data).
+ */
+/* #define DEBUG_MIRROR_BASE_ONLY  */
+ #define DEBUG_MIRROR_ROVER_ONLY 
 
 #ifdef __cplusplus
 }
