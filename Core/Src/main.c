@@ -86,6 +86,7 @@ DMA_HandleTypeDef hdma_usart3_tx;
  * gps1_last_pps_ms
  */
 
+uint8_t SMU_BOARD_ID = 0U;
 volatile uint8_t imu_whoami = 0U;
 volatile uint8_t imu_comm_ok = 0U;
 volatile uint8_t imu_init_ok = 0U;
@@ -367,19 +368,19 @@ int main(void)
 			}
 
 #ifdef SMU_GPS_IMU_CROSS
-			if (GPS_Init(ROVER_GPS_UART_HANDLE) == HAL_OK) {
+			if (SMU_BOARD_ID == 0U && GPS_Init(ROVER_GPS_UART_HANDLE) == HAL_OK) {
 				gps_init_ok = 1U;
 			} else {
 				gps_init_ok = 0U;
 			}
 
-//			if (GPS_StartReceiveIT() == HAL_OK) {
+//			if (SMU_BOARD_ID == 0U && GPS_StartReceiveIT() == HAL_OK) {
 //				gps_rx_start_ok = 1U;
 //			} else {
 //				gps_rx_start_ok = 0U;
 //			}
 
-			if (PPS_Init() == HAL_OK) {
+			if (SMU_BOARD_ID == 0U && PPS_Init() == HAL_OK) {
 				pps_init_ok = 1U;
 			} else {
 				pps_init_ok = 0U;
@@ -412,8 +413,10 @@ int main(void)
 						BASE_RST_Pin);
 
 #ifdef SMU_GPS_IMU_CROSS
-				PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
-				GPS_Process();
+				if (SMU_BOARD_ID == 0U) {
+					PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
+					GPS_Process();
+				}
 #endif /* SMU_GPS_IMU_CROSS */
 
 				if ((now - last_imu_poll_time) >= 10U) {
@@ -520,18 +523,18 @@ static void MX_FDCAN1_Init(void)
   /* USER CODE END FDCAN1_Init 1 */
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
-  hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
-  hfdcan1.Init.Mode = FDCAN_MODE_EXTERNAL_LOOPBACK;
+  hfdcan1.Init.FrameFormat = FDCAN_FRAME_FD_BRS;
+  hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan1.Init.AutoRetransmission = ENABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
-  hfdcan1.Init.NominalPrescaler = 11;
-  hfdcan1.Init.NominalSyncJumpWidth = 2;
+  hfdcan1.Init.NominalPrescaler = 10;
+  hfdcan1.Init.NominalSyncJumpWidth = 4;
   hfdcan1.Init.NominalTimeSeg1 = 17;
-  hfdcan1.Init.NominalTimeSeg2 = 2;
-  hfdcan1.Init.DataPrescaler = 11;
+  hfdcan1.Init.NominalTimeSeg2 = 4;
+  hfdcan1.Init.DataPrescaler = 2;
   hfdcan1.Init.DataSyncJumpWidth = 2;
-  hfdcan1.Init.DataTimeSeg1 = 17;
+  hfdcan1.Init.DataTimeSeg1 = 8;
   hfdcan1.Init.DataTimeSeg2 = 2;
   hfdcan1.Init.StdFiltersNbr = 1;
   hfdcan1.Init.ExtFiltersNbr = 0;

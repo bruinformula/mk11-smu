@@ -34,6 +34,7 @@ static uint32_t last_gps_cog_data_tx_time = 0U;
 
 static uint32_t last_imu_fd_tx_time = 0U;
 static uint8_t  imu_fd_half         = 0U;   /* 0=capture s1, 1=capture s2+send */
+static uint8_t  imu_fd_msg_counter  = 0U;   /* 3-bit rolling message counter */
 
 /* Sample-1 snapshot fields */
 static int16_t  imu_fd_s1_ax,  imu_fd_s1_ay,  imu_fd_s1_az;
@@ -206,6 +207,7 @@ static HAL_StatusTypeDef CAN_Send(uint32_t id, uint32_t data_length,
 	can_tx_header.Identifier = id;
 	can_tx_header.DataLength = data_length;
 	can_tx_header.FDFormat = fd_format;
+	can_tx_header.BitRateSwitch = (fd_format == FDCAN_FD_CAN) ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
 
 	if (HAL_FDCAN_AddMessageToTxFifoQ(can_fdcan, &can_tx_header, can_tx_data)
 			== HAL_OK) {
@@ -398,6 +400,7 @@ static void CAN_SendImuFd(uint32_t now_ms) {
 	if (can_imu_comm_ok == 0U) { error_flags |= 0x0001U; }
 	if (can_imu_init_ok == 0U) { error_flags |= 0x0002U; }
 	if (imu_cal_done    == 0U) { error_flags |= 0x0004U; }
+	error_flags |= (uint16_t)((imu_fd_msg_counter & 0x07U) << 7U);
 
 	/* angular acceleration: finite difference of corrected gyro */
 	gx_now = imu_gx_corr_dps;
@@ -488,6 +491,7 @@ static void CAN_SendImuFd(uint32_t now_ms) {
 	/* bytes 57-63 unused, already zeroed */
 
 	imu_fd_half = 0U;
+	imu_fd_msg_counter = (imu_fd_msg_counter + 1U) & 0x07U;
 	(void) CAN_Send(IMU_FD_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);
 }
 
@@ -576,16 +580,20 @@ void CAN_Process(uint32_t now_ms) {
 	}
 
 #ifdef SMU_GPS_IMU_CROSS
-	if ((now_ms - last_gps_cog_timesync_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS) {
-		last_gps_cog_timesync_tx_time = now_ms;
-		CAN_SendGpsCogTimesync(now_ms);
-	}
+	if (SMU_BOARD_ID == 0U) {
+		if ((now_ms - last_gps_cog_timesync_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS) {
+			last_gps_cog_timesync_tx_time = now_ms;
+			CAN_SendGpsCogTimesync(now_ms);
+		}
 
-	if ((now_ms - last_gps_cog_data_tx_time) >= GPS_COG_DATA_TX_INTERVAL_MS) {
-		last_gps_cog_data_tx_time = now_ms;
-		CAN_SendGpsCogPos(now_ms);
-		CAN_SendGpsCogNav(now_ms);
-		CAN_SendGpsCogImu(now_ms);
+		if ((now_ms - last_gps_cog_data_tx_time) >= GPS_COG_DATA_TX_INTERVAL_MS) {
+			last_gps_cog_data_tx_time = now_ms;
+			CAN_SendGpsCogPos(now_ms);
+			CAN_SendGpsCogNav(now_ms);
+			/* Note: CAN_SendGpsCogImu is commented out because IMU FD frame is
+			 * already transmitted on the same ID (0x043) in the new format. */
+			// CAN_SendGpsCogImu(now_ms);
+		}
 	}
 #endif /* SMU_GPS_IMU_CROSS */
 }

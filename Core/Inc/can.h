@@ -13,9 +13,16 @@ extern "C" {
 #define GPS_COG_POS_TX_ID      0x041U
 #define GPS_COG_NAV_TX_ID      0x042U
 #define GPS_COG_IMU_TX_ID      0x043U
-#define IMU1_ACCEL_TX_ID 0x4F5U
-#define IMU1_ATT_TX_ID   0x4F6U
-#define IMU_FD_TX_ID     0x12CU
+
+extern uint8_t SMU_BOARD_ID;
+
+#define SMU_BOARD_GPS       0U
+#define SMU_BOARD_FRONT_IMU 1U
+#define SMU_BOARD_REAR_IMU  2U
+
+#define IMU1_ACCEL_TX_ID (0x4F5U + (uint32_t)SMU_BOARD_ID * 2U)
+#define IMU1_ATT_TX_ID   (0x4F6U + (uint32_t)SMU_BOARD_ID * 2U)
+#define IMU_FD_TX_ID     (0x040U | ((uint32_t)SMU_BOARD_ID << 3) | 3U)
 
 #define IMU1_ACCEL_CAN_SCALE_MG_PER_G       (1000.0f)
 #define IMU1_ATT_CAN_SCALE_CDEG_PER_DEG     (100.0f)
