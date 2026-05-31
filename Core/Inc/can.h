@@ -17,7 +17,7 @@ extern "C" {
 extern uint8_t SMU_BOARD_ID;
 
 #define SMU_BOARD_GPS       0U
-#define SMU_BOARD_FRONT_IMU 1U
+#define SMU_BOARD_MID_IMU   1U
 #define SMU_BOARD_REAR_IMU  2U
 
 #define IMU1_ACCEL_TX_ID (0x4F5U + (uint32_t)SMU_BOARD_ID * 2U)
