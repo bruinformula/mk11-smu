@@ -61,8 +61,8 @@ void Error_Handler(void);
 #define VCP_TX_GPIO_Port GPIOA
 #define VCP_RX_Pin GPIO_PIN_3
 #define VCP_RX_GPIO_Port GPIOA
-#define IMU_SPI_CS_Pin GPIO_PIN_4
-#define IMU_SPI_CS_GPIO_Port GPIOA
+#define IMU_CS_Pin GPIO_PIN_4
+#define IMU_CS_GPIO_Port GPIOA
 #define GPS1_RST_Pin GPIO_PIN_1
 #define GPS1_RST_GPIO_Port GPIOB
 #define GPS1_PPS_Pin GPIO_PIN_2

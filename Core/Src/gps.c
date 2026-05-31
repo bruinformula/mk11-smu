@@ -26,8 +26,9 @@ static uint16_t  s_line_len = 0U;
 static uint8_t          s_dbg_queue[GPS_DBG_QUEUE_SIZE];
 static volatile uint16_t s_dbg_head = 0U;
 static volatile uint16_t s_dbg_tail = 0U;
-static uint8_t           s_dbg_tx_buf[GPS_DBG_TX_BUF_SIZE];
+static uint8_t          s_dbg_tx_buf[GPS_DBG_TX_BUF_SIZE];
 static volatile uint8_t  s_dbg_busy = 0U;
+static volatile uint8_t  s_drain_busy = 0U;
 
 volatile GPS_Data_t gps_data = {0};
 volatile GPS_Diag_t gps_diag = {0};
@@ -255,15 +256,28 @@ static void feed_byte(uint8_t b)
 static void drain_dma(void)
 {
     uint16_t pos;
+    uint32_t primask;
 
     if ((s_uart == NULL) || (s_uart->hdmarx == NULL)) {
         return;
     }
 
+    primask = __get_PRIMASK();
+    __disable_irq();
+    if (s_drain_busy != 0U) {
+        if (primask == 0U) { __enable_irq(); }
+        return;
+    }
+    s_drain_busy = 1U;
+    if (primask == 0U) { __enable_irq(); }
+
     pos = (uint16_t)(GPS_DMA_BUF_SIZE - __HAL_DMA_GET_COUNTER(s_uart->hdmarx));
     if (pos >= GPS_DMA_BUF_SIZE) { pos = 0U; }
 
-    if (pos == s_dma_last) { return; }
+    if (pos == s_dma_last) {
+        s_drain_busy = 0U;
+        return;
+    }
 
     if (pos > s_dma_last) {
         for (uint16_t i = s_dma_last; i < pos; i++) {
@@ -279,6 +293,7 @@ static void drain_dma(void)
     }
 
     s_dma_last = pos;
+    s_drain_busy = 0U;
 }
 
 /* ── DMA RX start ─────────────────────────────────────────────────────────── */
@@ -316,6 +331,7 @@ HAL_StatusTypeDef GPS_Init(UART_HandleTypeDef *uart)
     s_dbg_head = 0U;
     s_dbg_tail = 0U;
     s_dbg_busy = 0U;
+    s_drain_busy = 0U;
 
     memset((void *)&gps_data, 0, sizeof(gps_data));
     memset((void *)&gps_diag, 0, sizeof(gps_diag));
@@ -346,16 +362,14 @@ void GPS_Process(void)
 
 void GPS_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
 {
-    if ((s_uart != NULL) && (huart != NULL) && (huart->Instance == s_uart->Instance)) {
-        drain_dma();
-    }
+    (void)huart;
+    /* drain happens in main loop via GPS_Process() to avoid s_line race */
 }
 
 void GPS_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if ((s_uart != NULL) && (huart != NULL) && (huart->Instance == s_uart->Instance)) {
-        drain_dma();
-    }
+    (void)huart;
+    /* drain happens in main loop via GPS_Process() to avoid s_line race */
 }
 
 void GPS_UART_TxCpltCallback(UART_HandleTypeDef *huart)

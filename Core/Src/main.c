@@ -437,7 +437,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 921600;
+  huart1.Init.BaudRate = 460800;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -558,7 +558,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, IMU_SPI_CS_Pin|GPS2_WKUP_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|GPS2_WKUP_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPS1_RST_GPIO_Port, GPS1_RST_Pin, GPIO_PIN_SET);
@@ -566,8 +566,8 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPS_RTK_Pin|GPS_Standard_Pin|GPS_Error_Pin|GPS1_WKUP_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : IMU_SPI_CS_Pin GPS2_WKUP_Pin */
-  GPIO_InitStruct.Pin = IMU_SPI_CS_Pin|GPS2_WKUP_Pin;
+  /*Configure GPIO pins : IMU_CS_Pin GPS2_WKUP_Pin */
+  GPIO_InitStruct.Pin = IMU_CS_Pin|GPS2_WKUP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
