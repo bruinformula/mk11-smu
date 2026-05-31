@@ -73,7 +73,7 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 /* Comment out for IMU-only (non-cross) mode: UART1/UART3 are ignored and
  * only IMU CAN frames (0x4F5 / 0x4F6) are transmitted. */
-//#define SMU_GPS_IMU_CROSS
+#define SMU_GPS_IMU_CROSS
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

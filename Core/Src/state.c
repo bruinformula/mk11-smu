@@ -65,8 +65,8 @@ static float imu_cal_sum_az = 0.0f;
 static float imu_accel_scale = 1.0f;
 
 static uint32_t last_attitude_update_ms = 0U;
-static float gps1_vel_kf_state_mps = 0.0f;
-static float gps1_vel_kf_P = 1.0f;
+volatile float gps1_vel_kf_state_mps = 0.0f;
+volatile float gps1_vel_kf_P = 1.0f;
 
 static void State_ComputeCalRotation(float gx, float gy, float gz) {
 	float mag = sqrtf((gx * gx) + (gy * gy) + (gz * gz));
@@ -167,15 +167,17 @@ static void State_UpdateGpsNav(float dt_s) {
 
 	accel_forward_mps2 = imu_ax_corr_g * GRAVITY_MPS2;
 
-	gps1_vel_kf_state_mps += accel_forward_mps2 * dt_s;
-	gps1_vel_kf_P += GPS1_VEL_KF_Q * dt_s;
+	if (gps_data.fix_valid == 1U) {
+		gps1_vel_kf_state_mps += accel_forward_mps2 * dt_s;
+		gps1_vel_kf_P += GPS1_VEL_KF_Q * dt_s;
 
-	gps_speed_mps = gps_data.speed_kph / 3.6f;
-	K = gps1_vel_kf_P / (gps1_vel_kf_P + GPS1_VEL_KF_R);
-	gps1_vel_kf_state_mps += K * (gps_speed_mps - gps1_vel_kf_state_mps);
-	gps1_vel_kf_P *= (1.0f - K);
+		gps_speed_mps = gps_data.speed_kph / 3.6f;
+		K = gps1_vel_kf_P / (gps1_vel_kf_P + GPS1_VEL_KF_R);
+		gps1_vel_kf_state_mps += K * (gps_speed_mps - gps1_vel_kf_state_mps);
+		gps1_vel_kf_P *= (1.0f - K);
 
-	gps1_velocity_mps = gps1_vel_kf_state_mps;
+		gps1_velocity_mps = gps1_vel_kf_state_mps;
+	}
 
 	if (gps_data.heading_valid == 1U) {
 		heading_error_deg = AngleDiffDeg(gps_data.heading_deg, imu1_yaw_deg);

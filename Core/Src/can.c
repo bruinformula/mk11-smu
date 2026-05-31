@@ -51,6 +51,21 @@ static float imu_fd_vel_x_mps   = 0.0f;
 static float imu_fd_vel_y_mps   = 0.0f;
 static float imu_fd_vel_z_mps   = 0.0f;
 
+/* SDU Wheel Speed Parsing and Fusion variables */
+static volatile float sdu_wheel_rpm[4] = {0.0f};
+static volatile uint32_t last_sdu_rx_time[4] = {0};
+static volatile float average_wheel_speed_mps = 0.0f;
+static volatile uint32_t last_sdu_can_rx_time = 0;
+
+/* Accelerometer Variance ZUPT (Mode 3) variables */
+#define ZUPT_WINDOW_SIZE  10
+#define ZUPT_VAR_THRESHOLD 0.002f // Variance threshold in g^2
+
+static float accel_mag_history[ZUPT_WINDOW_SIZE] = {
+	1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+static uint8_t zupt_index = 0;
+
 static uint8_t can_imu_comm_ok = 0U;
 static uint8_t can_imu_init_ok = 0U;
 
@@ -381,6 +396,115 @@ static void CAN_SendGpsCogImu(uint32_t now_ms) {
 	(void) CAN_Send(GPS_COG_IMU_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);
 }
 
+static uint8_t DetectStationaryByVariance(float new_accel_mag) {
+	accel_mag_history[zupt_index] = new_accel_mag;
+	zupt_index = (zupt_index + 1) % ZUPT_WINDOW_SIZE;
+
+	// Calculate mean
+	float sum = 0.0f;
+	for (int i = 0; i < ZUPT_WINDOW_SIZE; i++) {
+		sum += accel_mag_history[i];
+	}
+	float mean = sum / ZUPT_WINDOW_SIZE;
+
+	// Calculate variance
+	float var_sum = 0.0f;
+	for (int i = 0; i < ZUPT_WINDOW_SIZE; i++) {
+		float diff = accel_mag_history[i] - mean;
+		var_sum += diff * diff;
+	}
+	float variance = var_sum / ZUPT_WINDOW_SIZE;
+
+	// If variance is extremely low, the sensor is stationary
+	return (variance < ZUPT_VAR_THRESHOLD);
+}
+
+static void CAN_UpdateVelocity(float dt_s, uint32_t now_ms) {
+	extern volatile float gps1_velocity_mps;
+	extern volatile float gps1_vel_kf_state_mps;
+	extern volatile float gps1_vel_kf_P;
+
+	uint8_t gps_locked = gps_data.fix_valid;
+	uint8_t sdu_speeds_available = (now_ms - last_sdu_can_rx_time) < 500; // 500ms timeout
+	uint8_t is_stationary = 0;
+
+	// Calculate SDU average wheel speed if available
+	float rpm_sum = 0.0f;
+	int active_count = 0;
+	for (int i = 0; i < 4; i++) {
+		if ((now_ms - last_sdu_rx_time[i]) < 500) {
+			rpm_sum += sdu_wheel_rpm[i];
+			active_count++;
+		}
+	}
+
+	if (active_count > 0) {
+		float average_wheel_rpm = rpm_sum / (float)active_count;
+		
+		#ifndef M_PI
+		#define M_PI 3.14159265358979323846f
+		#endif
+		#define SDU_TIRE_DIAMETER_INCHES   18.0f
+		#define SDU_TIRE_CIRCUMFERENCE_M   (SDU_TIRE_DIAMETER_INCHES * 0.0254f * M_PI)
+		
+		average_wheel_speed_mps = (average_wheel_rpm / 60.0f) * SDU_TIRE_CIRCUMFERENCE_M;
+		last_sdu_can_rx_time = now_ms;
+	}
+
+	// 1. Determine stationary status (ZUPT)
+	if (gps_locked) {
+		is_stationary = (gps_data.speed_kph < 0.5f);
+	} else if (sdu_speeds_available) {
+		is_stationary = (average_wheel_speed_mps < 0.1f);
+	} else {
+		// Fall back to statistical accelerometer variance check
+		is_stationary = DetectStationaryByVariance(imu_accel_mag_g);
+	}
+
+	if (is_stationary) {
+		imu_fd_vel_x_mps = 0.0f;
+		imu_fd_vel_y_mps = 0.0f;
+		imu_fd_vel_z_mps = 0.0f;
+		gps1_vel_kf_state_mps = 0.0f;
+		gps1_velocity_mps = 0.0f;
+		return;
+	}
+
+	// 2. Integrate with appropriate feedback correction
+	float accel_forward_mps2 = imu_ax_corr_g * IMU_FD_GRAVITY_MPS2;
+
+	if (gps_locked) {
+		// Mode 1: Fused with GPS Kalman Filter
+		imu_fd_vel_x_mps = gps1_velocity_mps;
+		// Leaky integration for lateral/vertical to limit drift
+		imu_fd_vel_y_mps = (0.995f * imu_fd_vel_y_mps) + (imu_ay_corr_g * IMU_FD_GRAVITY_MPS2 * dt_s);
+		imu_fd_vel_z_mps = (0.995f * imu_fd_vel_z_mps) + ((imu_az_corr_g - 1.0f) * IMU_FD_GRAVITY_MPS2 * dt_s);
+	} 
+	else if (sdu_speeds_available) {
+		// Mode 2: Fused with SDU Wheel Encoder Speed
+		// Run Kalman Filter correction step with SDU speed instead of GPS
+		float K = gps1_vel_kf_P / (gps1_vel_kf_P + 1.0f); // R_sdu = 1.0
+		gps1_vel_kf_state_mps += accel_forward_mps2 * dt_s;
+		gps1_vel_kf_state_mps += K * (average_wheel_speed_mps - gps1_vel_kf_state_mps);
+		gps1_vel_kf_P = (1.0f - K) * (gps1_vel_kf_P + 0.1f); // Q_sdu = 0.1
+
+		imu_fd_vel_x_mps = gps1_vel_kf_state_mps;
+		imu_fd_vel_y_mps = (0.995f * imu_fd_vel_y_mps) + (imu_ay_corr_g * IMU_FD_GRAVITY_MPS2 * dt_s);
+		imu_fd_vel_z_mps = (0.995f * imu_fd_vel_z_mps) + ((imu_az_corr_g - 1.0f) * IMU_FD_GRAVITY_MPS2 * dt_s);
+		gps1_velocity_mps = gps1_vel_kf_state_mps;
+	} 
+	else {
+		// Mode 3: Pure Inertial Leaky Integration
+		imu_fd_vel_x_mps = (0.995f * imu_fd_vel_x_mps) + (imu_ax_corr_g * IMU_FD_GRAVITY_MPS2 * dt_s);
+		imu_fd_vel_y_mps = (0.995f * imu_fd_vel_y_mps) + (imu_ay_corr_g * IMU_FD_GRAVITY_MPS2 * dt_s);
+		imu_fd_vel_z_mps = (0.995f * imu_fd_vel_z_mps) + ((imu_az_corr_g - 1.0f) * IMU_FD_GRAVITY_MPS2 * dt_s);
+		
+		// Update GPS KF variables to keep them in sync
+		gps1_vel_kf_state_mps = imu_fd_vel_x_mps;
+		gps1_velocity_mps = imu_fd_vel_x_mps;
+	}
+}
+
 static void CAN_SendImuFd(uint32_t now_ms) {
 	uint32_t ts_us;
 	uint16_t error_flags;
@@ -413,10 +537,8 @@ static void CAN_SendImuFd(uint32_t now_ms) {
 	imu_fd_prev_gy_dps = gy_now;
 	imu_fd_prev_gz_dps = gz_now;
 
-	/* linear velocity: integrate corrected accel (subtract 1g from Z to remove gravity) */
-	imu_fd_vel_x_mps += imu_ax_corr_g * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
-	imu_fd_vel_y_mps += imu_ay_corr_g * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
-	imu_fd_vel_z_mps += (imu_az_corr_g - 1.0f) * IMU_FD_GRAVITY_MPS2 * IMU_FD_DT_S;
+	/* linear velocity: integrate using multi-mode sensor fusion and ZUPT fallbacks */
+	CAN_UpdateVelocity(IMU_FD_DT_S, now_ms);
 
 	ax_mg = CAN_ClampS16(imu_ax_corr_g * IMU1_ACCEL_CAN_SCALE_MG_PER_G);
 	ay_mg = CAN_ClampS16(imu_ay_corr_g * IMU1_ACCEL_CAN_SCALE_MG_PER_G);
@@ -596,4 +718,29 @@ void CAN_Process(uint32_t now_ms) {
 		}
 	}
 #endif /* SMU_GPS_IMU_CROSS */
+}
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
+	if (hfdcan == can_fdcan && (RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0U) {
+		FDCAN_RxHeaderTypeDef RxHeader;
+		uint8_t RxData[64];
+
+		while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0) {
+			if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK) {
+				fdcan_rx_count++;
+
+				// Check if this is an SDU wheel speed frame (0x084, 0x08C, 0x094, 0x09C)
+				if (RxHeader.Identifier == 0x084 || RxHeader.Identifier == 0x08C ||
+					RxHeader.Identifier == 0x094 || RxHeader.Identifier == 0x09C) {
+
+					uint8_t idx = (RxHeader.Identifier - 0x084) / 8;
+					if (RxHeader.DataLength == FDCAN_DLC_BYTES_64) {
+						uint16_t raw_rpm = (uint16_t)(RxData[6] | (RxData[7] << 8));
+						sdu_wheel_rpm[idx] = (float)raw_rpm / 10.0f;
+						last_sdu_rx_time[idx] = HAL_GetTick();
+					}
+				}
+			}
+		}
+	}
 }
