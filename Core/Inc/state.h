@@ -10,7 +10,7 @@ extern "C" {
 
 #define IMU_ACCEL_SENS_G_PER_LSB     (0.000061f)
 #define IMU_GYRO_SENS_DPS_PER_LSB    (0.00875f)
-#define IMU_CAL_SAMPLES              50U
+#define IMU_CAL_SAMPLES              200U
 
 extern volatile uint8_t imu_cal_done;
 extern volatile uint32_t imu_cal_count;
@@ -46,10 +46,6 @@ extern volatile float gps1_heading_deg;
 extern volatile float imu1_pitch_deg;
 extern volatile float imu1_roll_deg;
 extern volatile float imu1_yaw_deg;
-
-extern volatile float imu_grav_ref_x;
-extern volatile float imu_grav_ref_y;
-extern volatile float imu_grav_ref_z;
 
 HAL_StatusTypeDef State_Init(void);
 void State_UpdateFromImuRaw(int16_t gx_raw,
