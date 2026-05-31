@@ -66,10 +66,8 @@ extern DMA_HandleTypeDef hdma_usart3_tx;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
-
-extern volatile uint32_t gps_uart_irq_count;
 /* USER CODE BEGIN EV */
-
+extern volatile uint32_t gps_uart_irq_count;
 /* USER CODE END EV */
 
 /******************************************************************************/
