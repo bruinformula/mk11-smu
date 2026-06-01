@@ -83,6 +83,24 @@ DMA_HandleTypeDef hdma_usart2_tx;
  * gps1_last_pps_ms
  */
 
+/* TO SIMULATE 0x040 GPS_FD WITHOUT ANTENNAS (modify these live):
+ *
+ * gps_data.last_update_ms    = HAL_GetTick()   (set to current tick for fresh age)
+ * gps_data.fix_valid         = 1
+ * gps_data.fix_quality       = 4               (4 = RTK fixed)
+ * gps_data.latitude_deg      = 34.0689
+ * gps_data.longitude_deg     = -118.4452
+ * gps1_velocity_mps          = 10.0
+ * gps_data.baseline_length_m = 1.5             (antenna separation in metres)
+ * gps_data.heading_deg       = 90.0
+ * gps_data.heading_accuracy_deg = 0.5
+ * gps_data.pitch_deg         = 2.0
+ * gps_data.pitch_acc_deg     = 0.3
+ * gps_data.tar_satellites    = 10
+ * gps_diag.sentence_count    = 1               (clears NO_SENTENCES error flag)
+ * gps_diag.uart_last_error_code = 0            (clears UART error flag)
+ */
+
 uint8_t SMU_BOARD_ID = 0U;
 volatile uint8_t imu_whoami = 0U;
 volatile uint8_t imu_comm_ok = 0U;
