@@ -7,6 +7,7 @@
 #define IMU1_ACCEL_TX_INTERVAL_MS 10U
 #define IMU1_ATT_TX_INTERVAL_MS   10U
 #define GPS1_TX_INTERVAL_MS       100U
+#define GPS1_FD_TX_INTERVAL_MS    100U
 
 volatile uint32_t fdcan_tx_count = 0U;
 volatile uint32_t fdcan_rx_count = 0U;
@@ -15,11 +16,12 @@ volatile uint32_t fdcan1_debug_cb = 0U;
 
 static FDCAN_HandleTypeDef *can_fdcan = NULL;
 static FDCAN_TxHeaderTypeDef can_tx_header;
-static uint8_t can_tx_data[8];
+static uint8_t can_tx_data[64];
 
 static uint32_t last_imu1_accel_tx_time = 0U;
 static uint32_t last_imu1_att_tx_time = 0U;
 static uint32_t last_gps1_tx_time = 0U;
+static uint32_t last_gps1_fd_tx_time = 0U;
 
 static uint8_t can_imu_comm_ok = 0U;
 static uint8_t can_imu_init_ok = 0U;
@@ -77,12 +79,47 @@ static void CAN_PackS32LE(uint8_t *data, uint8_t idx, int32_t value) {
 	data[idx + 3U] = (uint8_t) (((uint32_t) value >> 24) & 0xFFU);
 }
 
+static void CAN_PackU32LE(uint8_t *data, uint8_t idx, uint32_t value) {
+	data[idx] = (uint8_t) (value & 0xFFU);
+	data[idx + 1U] = (uint8_t) ((value >> 8) & 0xFFU);
+	data[idx + 2U] = (uint8_t) ((value >> 16) & 0xFFU);
+	data[idx + 3U] = (uint8_t) ((value >> 24) & 0xFFU);
+}
+
+static void CAN_PackFloatLE(uint8_t *data, uint8_t idx, float value) {
+	uint32_t bits;
+	memcpy(&bits, &value, sizeof(bits));
+	CAN_PackU32LE(data, idx, bits);
+}
+
 static HAL_StatusTypeDef CAN_Send(uint32_t id) {
 	if (can_fdcan == NULL) {
 		return HAL_ERROR;
 	}
 
 	can_tx_header.Identifier = id;
+	can_tx_header.DataLength = FDCAN_DLC_BYTES_8;
+	can_tx_header.FDFormat = FDCAN_CLASSIC_CAN;
+	can_tx_header.BitRateSwitch = FDCAN_BRS_OFF;
+
+	if (HAL_FDCAN_AddMessageToTxFifoQ(can_fdcan, &can_tx_header, can_tx_data)
+			== HAL_OK) {
+		fdcan_tx_count++;
+		return HAL_OK;
+	}
+
+	return HAL_ERROR;
+}
+
+static HAL_StatusTypeDef CAN_SendFd(uint32_t id, uint32_t dlc) {
+	if (can_fdcan == NULL) {
+		return HAL_ERROR;
+	}
+
+	can_tx_header.Identifier = id;
+	can_tx_header.DataLength = dlc;
+	can_tx_header.FDFormat = FDCAN_FD_CAN;
+	can_tx_header.BitRateSwitch = FDCAN_BRS_ON;
 
 	if (HAL_FDCAN_AddMessageToTxFifoQ(can_fdcan, &can_tx_header, can_tx_data)
 			== HAL_OK) {
@@ -168,6 +205,47 @@ static void CAN_SendGpsNav(void) {
 	(void) CAN_Send(GPS1_NAV_TX_ID);
 }
 
+static void CAN_SendGpsFd(uint32_t now_ms) {
+	uint32_t us_since_last;
+	uint32_t age_ms;
+	uint16_t length_mm;
+	uint16_t heading_acc_cdeg;
+	uint16_t pitch_acc_cdeg;
+
+	age_ms = now_ms - gps_data.last_update_ms;
+	if (age_ms > 4294967U) {
+		us_since_last = 0xFFFFFFFFU;
+	} else {
+		us_since_last = age_ms * 1000U;
+	}
+
+	length_mm = CAN_ClampU16(
+			gps_data.baseline_length_m * GPS1_LENGTH_CAN_SCALE_MM_PER_M);
+	heading_acc_cdeg = CAN_ClampU16(
+			gps_data.heading_acc_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+	pitch_acc_cdeg = CAN_ClampU16(
+			gps_data.pitch_acc_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+
+	memset(can_tx_data, 0, sizeof(can_tx_data));
+	CAN_PackU32LE(can_tx_data, 0U, us_since_last);
+	CAN_PackU16LE(can_tx_data, 4U, 0U); /* error flags reserved */
+	CAN_PackFloatLE(can_tx_data, 6U, gps_data.latitude_deg);
+	CAN_PackFloatLE(can_tx_data, 10U, gps_data.longitude_deg);
+	CAN_PackFloatLE(can_tx_data, 14U, gps1_velocity_mps);
+	can_tx_data[18] = gps_data.fix_quality;
+	can_tx_data[19] = 0U; /* pad */
+	CAN_PackU16LE(can_tx_data, 20U, length_mm);
+	/* 22-23 reserved */
+	CAN_PackFloatLE(can_tx_data, 24U, gps_data.heading_deg);
+	CAN_PackU16LE(can_tx_data, 28U, heading_acc_cdeg);
+	CAN_PackFloatLE(can_tx_data, 30U, gps_data.pitch_deg);
+	CAN_PackU16LE(can_tx_data, 34U, pitch_acc_cdeg);
+	can_tx_data[36] = gps_data.satellites;
+	/* 37-47 reserved (length_acc not provided by PQTMTAR) */
+
+	(void) CAN_SendFd(GPS1_FD_TX_ID, FDCAN_DLC_BYTES_48);
+}
+
 HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan) {
 	FDCAN_FilterTypeDef sFilterConfig = { 0 };
 
@@ -217,6 +295,7 @@ HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan) {
 	last_imu1_accel_tx_time = 0U;
 	last_imu1_att_tx_time = 0U;
 	last_gps1_tx_time = 0U;
+	last_gps1_fd_tx_time = 0U;
 
 	return HAL_OK;
 }
@@ -241,5 +320,10 @@ void CAN_Process(uint32_t now_ms) {
 		last_gps1_tx_time = now_ms;
 		CAN_SendGpsPos();
 		CAN_SendGpsNav();
+	}
+
+	if ((now_ms - last_gps1_fd_tx_time) >= GPS1_FD_TX_INTERVAL_MS) {
+		last_gps1_fd_tx_time = now_ms;
+		CAN_SendGpsFd(now_ms);
 	}
 }

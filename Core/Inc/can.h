@@ -12,6 +12,7 @@ extern "C" {
 #define GPS1_NAV_TX_ID   0x4F4U
 #define IMU1_ACCEL_TX_ID 0x4F5U
 #define IMU1_ATT_TX_ID   0x4F6U
+#define GPS1_FD_TX_ID    0x040U
 
 #define IMU1_ACCEL_CAN_SCALE_MG_PER_G       (1000.0f)
 #define IMU1_ATT_CAN_SCALE_CDEG_PER_DEG     (100.0f)
@@ -19,6 +20,7 @@ extern "C" {
 #define GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG (100.0f)
 #define GPS1_ALT_CAN_SCALE_DM_PER_M         (10.0f)
 #define GPS1_POS_CAN_SCALE_DEGE7_PER_DEG    (10000000.0f)
+#define GPS1_LENGTH_CAN_SCALE_MM_PER_M      (1000.0f)
 
 extern volatile uint32_t fdcan_tx_count;
 extern volatile uint32_t fdcan_rx_count;

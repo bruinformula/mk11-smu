@@ -20,6 +20,14 @@ typedef struct {
     float    course_deg;
     float    heading_deg;
     float    hdop;
+    /* PQTMTAR (moving-base attitude) */
+    uint8_t  tar_quality;
+    uint8_t  tar_satellites;
+    float    baseline_length_m;
+    float    pitch_deg;
+    float    heading_acc_deg;
+    float    pitch_acc_deg;
+    uint32_t last_update_ms;
 } GPS_Data_t;
 
 typedef struct {
