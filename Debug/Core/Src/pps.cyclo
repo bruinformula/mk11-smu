@@ -1,3 +1,0 @@
-../Core/Src/pps.c:12:6:PPS_ForcePinConfig	1
-../Core/Src/pps.c:23:19:PPS_Init	1
-../Core/Src/pps.c:38:6:PPS_Process	6

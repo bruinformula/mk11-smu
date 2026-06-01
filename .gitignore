@@ -1,0 +1,18 @@
+# STM32CubeIDE Build outputs
+Debug/
+Release/
+
+# Local IDE configuration settings
+.settings/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Scratch and junk files
+holbulshit*
+holybullshitbro
+image.png
+penisballs*
+temp_output.txt
+*.pdf
