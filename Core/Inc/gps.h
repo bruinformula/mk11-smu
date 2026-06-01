@@ -13,6 +13,7 @@ typedef struct {
     uint8_t  fix_quality;
     uint8_t  satellites;
     uint8_t  heading_valid;
+    uint8_t  heading_quality;
     float    latitude_deg;
     float    longitude_deg;
     float    altitude_m;
@@ -20,6 +21,11 @@ typedef struct {
     float    course_deg;
     float    heading_deg;
     float    hdop;
+    float    heading_accuracy_deg;
+    float    baseline_length_m;
+    float    pitch_deg;
+    char     utc_time[16];
+    char     utc_date[16];
 } GPS_Data_t;
 
 typedef struct {
@@ -28,6 +34,9 @@ typedef struct {
     uint32_t rmc_count;
     uint32_t gga_count;
     uint32_t vtg_count;
+    uint32_t pqtmtar_count;
+    uint32_t sentence_count;
+    uint32_t uart_last_error_code;
     uint8_t  start_status;
     uint8_t  last_byte;
 } GPS_Diag_t;

@@ -32,6 +32,8 @@ extern uint8_t SMU_BOARD_ID;
 #define GPS1_POS_CAN_SCALE_DEGE7_PER_DEG    (10000000.0f)
 #define GPS1_HDOP_CAN_SCALE_CENTI_PER_UNIT  (100.0f)
 #define GPS1_BASELINE_CAN_SCALE_MM_PER_M    (1000.0f)
+#define SMU_GPS_IMU_CROSS
+
 
 /* IMU FD (0x12C) scale factors */
 #define IMU_FD_ANG_ACCEL_SCALE  (10.0f)    /* LSB = 0.1 dps/s */

@@ -1,7 +1,7 @@
-../Core/Src/state.c:71:13:State_ComputeCalRotation	4
-../Core/Src/state.c:119:14:WrapAngleDeg	3
-../Core/Src/state.c:131:14:AngleDiffDeg	1
-../Core/Src/state.c:135:13:State_UpdateAttitude	1
-../Core/Src/state.c:158:13:State_UpdateGpsNav	5
-../Core/Src/state.c:198:19:State_Init	1
-../Core/Src/state.c:257:6:State_UpdateFromImuRaw	7
+../Core/Src/state.c:70:13:State_ComputeCalRotation	4
+../Core/Src/state.c:136:14:WrapAngleDeg	3
+../Core/Src/state.c:151:14:AngleDiffDeg	1
+../Core/Src/state.c:156:13:State_UpdateAttitude	1
+../Core/Src/state.c:178:13:State_UpdateGpsNav	6
+../Core/Src/state.c:272:19:State_Init	1
+../Core/Src/state.c:338:6:State_UpdateFromImuRaw	7

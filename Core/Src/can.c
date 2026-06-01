@@ -2,6 +2,11 @@
 #include "state.h"
 #include "gps.h"
 
+#ifndef SMU_GPS_IMU_CROSS
+#define SMU_GPS_IMU_CROSS
+#endif
+
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
 
@@ -20,9 +25,31 @@
 #define IMU_FD_GRAVITY_MPS2 9.80665f
 
 volatile uint32_t fdcan_tx_count = 0U;
+volatile uint32_t fdcan_tx_fail_count = 0U;
+volatile uint32_t fdcan_tx_queued_count = 0U;
+volatile uint32_t fdcan_tx_queue_drop_count = 0U;
+volatile uint8_t fdcan_tx_queue_high_water = 0U;
 volatile uint32_t fdcan_rx_count = 0U;
 volatile uint32_t fdcan_rx_error_count = 0U;
 volatile uint32_t fdcan1_debug_cb = 0U;
+
+#define CAN_TX_QUEUE_DEPTH 32U
+
+typedef struct
+{
+	uint32_t id;
+	uint32_t data_length;
+	uint32_t fd_format;
+	uint8_t data[CAN_GPS_COG_FRAME_BYTES];
+} CAN_TxQueueEntry_t;
+
+static CAN_TxQueueEntry_t can_tx_queue[CAN_TX_QUEUE_DEPTH];
+static volatile uint8_t can_tx_queue_head = 0U; /* read index  */
+static volatile uint8_t can_tx_queue_tail = 0U; /* write index */
+static volatile uint8_t can_tx_queue_count = 0U;
+
+static uint32_t last_can_status_tx_time = 0U;
+#define CAN_STATUS_INTERVAL_MS 1000U
 
 static FDCAN_HandleTypeDef *can_fdcan = NULL;
 static FDCAN_TxHeaderTypeDef can_tx_header;
@@ -252,6 +279,77 @@ static uint8_t CAN_GpsErrorFlags(void)
 	return flags;
 }
 
+static HAL_StatusTypeDef CAN_TryHalSend(uint32_t id, uint32_t data_length,
+										uint32_t fd_format, const uint8_t *data)
+{
+	can_tx_header.Identifier = id;
+	can_tx_header.DataLength = data_length;
+	can_tx_header.FDFormat = fd_format;
+	can_tx_header.BitRateSwitch = (fd_format == FDCAN_FD_CAN) ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
+
+	if (HAL_FDCAN_AddMessageToTxFifoQ(can_fdcan, &can_tx_header,
+									  (uint8_t *)data) == HAL_OK)
+	{
+		fdcan_tx_count++;
+		return HAL_OK;
+	}
+
+	return HAL_BUSY;
+}
+
+static void CAN_DrainTxQueue(void)
+{
+	if (can_fdcan == NULL)
+	{
+		return;
+	}
+
+	while (can_tx_queue_count > 0U)
+	{
+		const CAN_TxQueueEntry_t *entry = &can_tx_queue[can_tx_queue_head];
+
+		if (HAL_FDCAN_GetTxFifoFreeLevel(can_fdcan) == 0U)
+		{
+			break;
+		}
+
+		if (CAN_TryHalSend(entry->id, entry->data_length, entry->fd_format,
+						   entry->data) != HAL_OK)
+		{
+			break;
+		}
+
+		can_tx_queue_head = (can_tx_queue_head + 1U) % CAN_TX_QUEUE_DEPTH;
+		__disable_irq();
+		can_tx_queue_count--;
+		__enable_irq();
+	}
+}
+
+static uint8_t CAN_TxDataLengthBytes(uint32_t data_length)
+{
+	switch (data_length)
+	{
+	case FDCAN_DLC_BYTES_0:  return 0U;
+	case FDCAN_DLC_BYTES_1:  return 1U;
+	case FDCAN_DLC_BYTES_2:  return 2U;
+	case FDCAN_DLC_BYTES_3:  return 3U;
+	case FDCAN_DLC_BYTES_4:  return 4U;
+	case FDCAN_DLC_BYTES_5:  return 5U;
+	case FDCAN_DLC_BYTES_6:  return 6U;
+	case FDCAN_DLC_BYTES_7:  return 7U;
+	case FDCAN_DLC_BYTES_8:  return 8U;
+	case FDCAN_DLC_BYTES_12: return 12U;
+	case FDCAN_DLC_BYTES_16: return 16U;
+	case FDCAN_DLC_BYTES_20: return 20U;
+	case FDCAN_DLC_BYTES_24: return 24U;
+	case FDCAN_DLC_BYTES_32: return 32U;
+	case FDCAN_DLC_BYTES_48: return 48U;
+	case FDCAN_DLC_BYTES_64: return 64U;
+	default:                 return 0U;
+	}
+}
+
 static HAL_StatusTypeDef CAN_Send(uint32_t id, uint32_t data_length,
 								  uint32_t fd_format)
 {
@@ -260,18 +358,102 @@ static HAL_StatusTypeDef CAN_Send(uint32_t id, uint32_t data_length,
 		return HAL_ERROR;
 	}
 
-	can_tx_header.Identifier = id;
-	can_tx_header.DataLength = data_length;
-	can_tx_header.FDFormat = fd_format;
-	can_tx_header.BitRateSwitch = (fd_format == FDCAN_FD_CAN) ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
+	/* Always try to flush whatever is already pending first so message
+	 * ordering on the bus matches the order CAN_Send was called. */
+	CAN_DrainTxQueue();
 
-	if (HAL_FDCAN_AddMessageToTxFifoQ(can_fdcan, &can_tx_header, can_tx_data) == HAL_OK)
+	if (can_tx_queue_count == 0U)
 	{
-		fdcan_tx_count++;
-		return HAL_OK;
+		HAL_StatusTypeDef st = CAN_TryHalSend(id, data_length, fd_format,
+											  can_tx_data);
+		if (st == HAL_OK)
+		{
+			return HAL_OK;
+		}
 	}
 
-	return HAL_ERROR;
+	/* FIFO full (or queue already had pending entries) → enqueue. */
+	if (can_tx_queue_count >= CAN_TX_QUEUE_DEPTH)
+	{
+		fdcan_tx_queue_drop_count++;
+		fdcan_tx_fail_count++;
+		return HAL_ERROR;
+	}
+
+	CAN_TxQueueEntry_t *slot = &can_tx_queue[can_tx_queue_tail];
+	slot->id = id;
+	slot->data_length = data_length;
+	slot->fd_format = fd_format;
+	{
+		uint8_t bytes = CAN_TxDataLengthBytes(data_length);
+		if (bytes > CAN_GPS_COG_FRAME_BYTES) bytes = CAN_GPS_COG_FRAME_BYTES;
+		memcpy(slot->data, can_tx_data, bytes);
+	}
+
+	can_tx_queue_tail = (can_tx_queue_tail + 1U) % CAN_TX_QUEUE_DEPTH;
+	__disable_irq();
+	can_tx_queue_count++;
+	if (can_tx_queue_count > fdcan_tx_queue_high_water)
+	{
+		fdcan_tx_queue_high_water = can_tx_queue_count;
+	}
+	__enable_irq();
+	fdcan_tx_queued_count++;
+	return HAL_OK;
+}
+
+static void CAN_DumpStatus(uint32_t now_ms)
+{
+	FDCAN_ProtocolStatusTypeDef psr = {0};
+	FDCAN_ErrorCountersTypeDef ec = {0};
+	uint32_t tx_fl;
+	uint32_t tx_pend;
+	char line[160];
+	int n;
+
+	if (can_fdcan == NULL)
+	{
+		return;
+	}
+
+	(void)HAL_FDCAN_GetProtocolStatus(can_fdcan, &psr);
+	(void)HAL_FDCAN_GetErrorCounters(can_fdcan, &ec);
+
+	tx_fl = HAL_FDCAN_GetTxFifoFreeLevel(can_fdcan);
+	tx_pend = can_fdcan->Instance->TXFQS & 0x3FU;
+
+	n = snprintf(line, sizeof(line),
+				 "CAN> tx=%lu fail=%lu rx=%lu rxerr=%lu LEC=%lu DLEC=%lu "
+				 "BO=%lu EP=%lu EW=%lu TEC=%lu REC=%lu fifo_free=%lu pend=%lu\r\n",
+				 (unsigned long)fdcan_tx_count,
+				 (unsigned long)fdcan_tx_fail_count,
+				 (unsigned long)fdcan_rx_count,
+				 (unsigned long)fdcan_rx_error_count,
+				 (unsigned long)psr.LastErrorCode,
+				 (unsigned long)psr.DataLastErrorCode,
+				 (unsigned long)psr.BusOff,
+				 (unsigned long)psr.ErrorPassive,
+				 (unsigned long)psr.Warning,
+				 (unsigned long)ec.TxErrorCnt,
+				 (unsigned long)ec.RxErrorCnt,
+				 (unsigned long)tx_fl,
+				 (unsigned long)tx_pend);
+
+	if (n > 0)
+	{
+		GPS_DebugMirror((const uint8_t *)line, (uint16_t)n);
+	}
+
+	/* Auto-recover from bus-off: HAL clears INIT once recovery sequence completes,
+	 * but on STM32 FDCAN you must request it via clearing CCCR.INIT after 128*11
+	 * recessive bits. The HAL does this if AutoRetransmission is on AND we call
+	 * HAL_FDCAN_Start again after bus-off. */
+	if (psr.BusOff != 0U)
+	{
+		(void)HAL_FDCAN_Start(can_fdcan);
+	}
+
+	(void)now_ms;
 }
 
 static void CAN_SendImuAccel(void)
@@ -346,10 +528,10 @@ static void CAN_SendGpsCogPos(uint32_t now_ms)
 	uint16_t hdop_centi;
 
 	lat_dege7 = CAN_ClampS32(
-		gps1_latitude_deg * GPS1_POS_CAN_SCALE_DEGE7_PER_DEG);
+		gps_data.latitude_deg * GPS1_POS_CAN_SCALE_DEGE7_PER_DEG);
 	lon_dege7 = CAN_ClampS32(
-		gps1_longitude_deg * GPS1_POS_CAN_SCALE_DEGE7_PER_DEG);
-	alt_mm = CAN_ClampS32(gps1_altitude_m * GPS1_ALT_CAN_SCALE_MM_PER_M);
+		gps_data.longitude_deg * GPS1_POS_CAN_SCALE_DEGE7_PER_DEG);
+	alt_mm = CAN_ClampS32(gps_data.altitude_m * GPS1_ALT_CAN_SCALE_MM_PER_M);
 	hdop_centi = CAN_ClampU16(gps_data.hdop * GPS1_HDOP_CAN_SCALE_CENTI_PER_UNIT);
 
 	memset(can_tx_data, 0, sizeof(can_tx_data));
@@ -376,11 +558,11 @@ static void CAN_SendGpsCogNav(uint32_t now_ms)
 	int32_t pitch_cdeg;
 
 	vel_cmps = CAN_ClampU32(
-		gps1_velocity_mps * GPS1_VEL_CAN_SCALE_CMPS_PER_MPS);
+		(gps_data.speed_kph / 3.6f) * GPS1_VEL_CAN_SCALE_CMPS_PER_MPS);
 	course_cdeg = CAN_ClampS32(
 		gps_data.course_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	heading_cdeg = CAN_ClampS32(
-		gps1_heading_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+		gps_data.course_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	heading_accuracy_cdeg = CAN_ClampU16(
 		gps_data.heading_accuracy_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	baseline_mm = CAN_ClampU32(
@@ -630,6 +812,7 @@ static void CAN_UpdateVelocity(float dt_s, uint32_t now_ms)
 	if (gps_locked)
 	{
 		/* Mode 1: Fused with GPS Kalman Filter */
+		gps1_velocity_mps = gps_data.speed_kph / 3.6f;
 		imu_fd_vel_x_mps = gps1_velocity_mps;
 		/* Integrate Earth-Frame lateral/vertical components with leaky damping to mitigate drift */
 		// Force every mode to use the isolated, rotated nav components!
@@ -844,9 +1027,12 @@ HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan)
 	can_tx_header.MessageMarker = 0U;
 
 	fdcan_tx_count = 0U;
+	fdcan_tx_fail_count = 0U;
 	fdcan_rx_count = 0U;
 	fdcan_rx_error_count = 0U;
 	fdcan1_debug_cb = 0U;
+
+	last_can_status_tx_time = 0U;
 
 	can_imu_comm_ok = 0U;
 	can_imu_init_ok = 0U;
@@ -876,6 +1062,10 @@ void CAN_SetImuStatus(uint8_t imu_comm_ok, uint8_t imu_init_ok)
 
 void CAN_Process(uint32_t now_ms)
 {
+	/* Flush any frames left over in the software TX queue from a previous
+	 * pass when the FDCAN FIFO was full. */
+	CAN_DrainTxQueue();
+
 	if ((now_ms - last_imu_fd_tx_time) >= IMU_FD_TX_INTERVAL_MS)
 	{
 		last_imu_fd_tx_time = now_ms;
@@ -897,23 +1087,39 @@ void CAN_Process(uint32_t now_ms)
 #ifdef SMU_GPS_IMU_CROSS
 	if (SMU_BOARD_ID == 0U)
 	{
+		/* Stagger GPS FD frames so only ONE is queued per CAN_Process pass.
+		 * The FDCAN TX FIFO is 3 deep and IMU FD + classic accel + classic
+		 * att already fill it on every 10 ms tick; queuing pos + nav (+ the
+		 * occasional timesync) in the same iteration causes the later ones
+		 * to be dropped (HAL_FDCAN_AddMessageToTxFifoQ → fail). */
 		if ((now_ms - last_gps_cog_timesync_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS)
 		{
 			last_gps_cog_timesync_tx_time = now_ms;
 			CAN_SendGpsCogTimesync(now_ms);
 		}
-
-		if ((now_ms - last_gps_cog_data_tx_time) >= GPS_COG_DATA_TX_INTERVAL_MS)
+		else if ((now_ms - last_gps_cog_data_tx_time) >= GPS_COG_DATA_TX_INTERVAL_MS)
 		{
-			last_gps_cog_data_tx_time = now_ms;
-			CAN_SendGpsCogPos(now_ms);
-			CAN_SendGpsCogNav(now_ms);
-			/* Note: CAN_SendGpsCogImu is commented out because IMU FD frame is
-			 * already transmitted on the same ID (0x043) in the new format. */
-			// CAN_SendGpsCogImu(now_ms);
+			static uint8_t gps_data_phase = 0U;
+			if (gps_data_phase == 0U)
+			{
+				CAN_SendGpsCogPos(now_ms);
+				gps_data_phase = 1U;
+			}
+			else
+			{
+				CAN_SendGpsCogNav(now_ms);
+				gps_data_phase = 0U;
+				last_gps_cog_data_tx_time = now_ms;
+			}
 		}
 	}
 #endif /* SMU_GPS_IMU_CROSS */
+
+	if ((now_ms - last_can_status_tx_time) >= CAN_STATUS_INTERVAL_MS)
+	{
+		last_can_status_tx_time = now_ms;
+		CAN_DumpStatus(now_ms);
+	}
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
