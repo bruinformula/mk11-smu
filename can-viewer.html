@@ -93,13 +93,13 @@
       <div><span class="card-id">0x040</span> <span class="card-name">GPS_FD</span></div>
       <span class="card-rate" id="rate-040">-- Hz</span>
     </div>
-    <div class="field"><span class="field-name">Age</span><span class="field-value" id="f040-age">--</span></div>
+    <div class="field"><span class="field-name">Age (µs since last msg)</span><span class="field-value" id="f040-age">--</span></div>
     <div class="field"><span class="field-name">Error flags</span><span class="field-value" id="f040-err">--</span></div>
     <div class="field"><span class="field-name">Latitude</span><span class="field-value" id="f040-lat">--</span></div>
     <div class="field"><span class="field-name">Longitude</span><span class="field-value" id="f040-lon">--</span></div>
     <div class="field"><span class="field-name">Velocity</span><span class="field-value" id="f040-vel">--</span></div>
     <div class="field"><span class="field-name">Fix quality</span><span class="field-value" id="f040-qual">--</span></div>
-    <div class="field"><span class="field-name">Baseline</span><span class="field-value" id="f040-base">--</span></div>
+    <div class="field"><span class="field-name">Baseline (antenna sep.)</span><span class="field-value" id="f040-base">--</span></div>
     <div class="field"><span class="field-name">Heading</span><span class="field-value" id="f040-hdg">--</span></div>
     <div class="field"><span class="field-name">Hdg accuracy</span><span class="field-value" id="f040-hdgacc">--</span></div>
     <div class="field"><span class="field-name">Pitch</span><span class="field-value" id="f040-pitch">--</span></div>
@@ -143,6 +143,8 @@
       <div><span class="card-id">0x043</span> <span class="card-name">IMU_FD</span></div>
       <span class="card-rate" id="rate-043">-- Hz</span>
     </div>
+    <div class="field"><span class="field-name">Timestamp</span><span class="field-value" id="f043-ts">--</span></div>
+    <div class="field"><span class="field-name">Exp period</span><span class="field-value" id="f043-period">--</span></div>
     <div class="field"><span class="field-name">Error flags</span><span class="field-value" id="f043-err">--</span></div>
     <div class="field"><span class="field-name">Jitter</span><span class="field-value" id="f043-jitter">--</span></div>
     <div class="field" style="padding-top:4px;color:#555;font-size:10px"><span>── Sample 0 ──────────────</span></div>
@@ -337,6 +339,8 @@ function decode(idStr, bytes) {
   }
 
   else if (idStr === '043' && bytes.length >= 56) {
+    const ts       = u32(bytes, 0);
+    const period   = bytes[4];
     const errFlags = u16(bytes, 5);
     const jitter   = u16(bytes, 31);
 
@@ -368,6 +372,8 @@ function decode(idStr, bytes) {
     const s1vb = s16(bytes, 53) / 100;
     const s1vc = s16(bytes, 55) / 100;
 
+    set('f043-ts', (ts / 1000).toFixed(0) + ' ms');
+    set('f043-period', period * 100 + ' µs');
     set('f043-err', '0x' + errFlags.toString(16).toUpperCase().padStart(4,'0'), (errFlags & 0x7) ? 'err' : 'ok');
     set('f043-jitter', jitter + ' µs', jitter > 2000 ? 'warn' : 'ok');
 
