@@ -81,7 +81,9 @@ void Error_Handler(void);
 #define GPS1_WKUP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+/* Comment out to transmit IMU frames only (0x4F5, 0x4F6); define to also
+ * transmit GPS frames (0x040, 0x041, 0x042) when SMU_BOARD_ID == 0. */
+#define SMU_GPS_IMU_CROSS
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

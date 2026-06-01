@@ -167,8 +167,28 @@ static void parse_rmc(char *buf)
     gps_data.longitude_deg = parse_lon(f[5], f[6]);
     gps_data.speed_kph   = (f[7][0] != '\0') ? ((float)atof(f[7]) * 1.852f) : 0.0f;
     gps_data.course_deg  = (f[8][0] != '\0') ? (float)atof(f[8]) : 0.0f;
+    gps_data.last_update_ms = HAL_GetTick();
 
     gps_diag.rmc_count++;
+}
+
+/* $PQTMTAR,<Ver>,<Time>,<Quality>,<Res1>,<Length>,<Pitch>,<Res2>,<Heading>,<Acc_Pitch>,<Res3>,<Acc_Heading>,<UsedSV>*CS */
+static void parse_pqtmtar(char *buf)
+{
+    char *f[16] = {0};
+    if (split_fields(buf, f, 16U) < 13U) { return; }
+
+    gps_data.tar_quality       = (f[3][0] != '\0') ? (uint8_t)atoi(f[3]) : 0U;
+    gps_data.baseline_length_m = (f[5][0] != '\0') ? (float)atof(f[5]) : 0.0f;
+    gps_data.pitch_deg         = (f[6][0] != '\0') ? (float)atof(f[6]) : 0.0f;
+    gps_data.heading_deg       = (f[8][0] != '\0') ? (float)atof(f[8]) : gps_data.heading_deg;
+    gps_data.heading_valid     = (f[8][0] != '\0') ? 1U : 0U;
+    gps_data.pitch_acc_deg     = (f[9][0] != '\0') ? (float)atof(f[9]) : 0.0f;
+    gps_data.heading_accuracy_deg = (f[11][0] != '\0') ? (float)atof(f[11]) : 0.0f;
+    gps_data.tar_satellites    = (f[12][0] != '\0') ? (uint8_t)atoi(f[12]) : 0U;
+    gps_data.last_update_ms    = HAL_GetTick();
+
+    gps_diag.pqtmtar_count++;
 }
 
 static void parse_gga(char *buf)
@@ -182,6 +202,7 @@ static void parse_gga(char *buf)
     gps_data.satellites  = (f[7][0] != '\0') ? (uint8_t)atoi(f[7]) : 0U;
     gps_data.hdop        = (f[8][0] != '\0') ? (float)atof(f[8]) : 0.0f;
     gps_data.altitude_m  = (f[9][0] != '\0') ? (float)atof(f[9]) : 0.0f;
+    gps_data.last_update_ms = HAL_GetTick();
 
     gps_diag.gga_count++;
 }
@@ -205,7 +226,7 @@ static void handle_sentence(const char *s)
     char dbg[GPS_LINE_BUF_SIZE + 8U];
     int  n;
 
-    gps_diag.sentences++;
+    gps_diag.sentence_count++;
 
     n = snprintf(dbg, sizeof(dbg), "GPS>%s\r\n", s);
     if (n > 0) {
@@ -221,6 +242,9 @@ static void handle_sentence(const char *s)
     } else if ((strncmp(s, "$GNVTG", 6) == 0) || (strncmp(s, "$GPVTG", 6) == 0)) {
         snprintf(buf, sizeof(buf), "%s", s);
         parse_vtg(buf);
+    } else if (strncmp(s, "$PQTMTAR", 8) == 0) {
+        snprintf(buf, sizeof(buf), "%s", s);
+        parse_pqtmtar(buf);
     }
 }
 

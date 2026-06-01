@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MK11 CAN Viewer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d0d; color: #e0e0e0; font-family: 'Courier New', monospace; font-size: 13px; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: #1a1a1a; border-bottom: 1px solid #333;
+  }
+  header h1 { font-size: 15px; font-weight: bold; color: #fff; letter-spacing: 1px; }
+  #status { font-size: 12px; color: #888; margin-left: auto; }
+  #status.connected { color: #4caf50; }
+
+  button {
+    padding: 6px 14px; border: 1px solid #555; border-radius: 4px;
+    background: #222; color: #e0e0e0; cursor: pointer; font-family: inherit; font-size: 12px;
+  }
+  button:hover { background: #333; }
+  button.active { border-color: #4caf50; color: #4caf50; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px; padding: 10px;
+  }
+
+  .card {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+    padding: 10px;
+  }
+  .card.active { border-color: #4caf50; }
+  .card.stale { border-color: #555; opacity: 0.6; }
+
+  .card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #2a2a2a;
+  }
+  .card-id { font-size: 14px; font-weight: bold; color: #4fc3f7; }
+  .card-name { font-size: 11px; color: #aaa; }
+  .card-rate { font-size: 11px; color: #888; }
+
+  .field { display: flex; justify-content: space-between; padding: 2px 0; }
+  .field-name { color: #aaa; }
+  .field-value { color: #fff; font-weight: bold; }
+  .field-value.ok { color: #4caf50; }
+  .field-value.warn { color: #ff9800; }
+  .field-value.err { color: #f44336; }
+
+  .log-section { margin: 0 10px 10px; }
+  .log-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0; border-bottom: 1px solid #333; margin-bottom: 6px;
+  }
+  .log-header span { color: #aaa; font-size: 12px; }
+  #log {
+    height: 160px; overflow-y: auto; background: #111;
+    border: 1px solid #2a2a2a; border-radius: 4px; padding: 6px;
+    font-size: 11px; line-height: 1.6;
+  }
+  .log-line { color: #666; }
+  .log-line .lid { color: #4fc3f7; }
+  .log-line .ldata { color: #aaa; }
+
+  .full-width { grid-column: 1 / -1; }
+
+  .badge {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: bold;
+  }
+  .badge-green { background: #1b3a1b; color: #4caf50; }
+  .badge-red { background: #3a1b1b; color: #f44336; }
+  .badge-gray { background: #2a2a2a; color: #888; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MK11 CAN VIEWER</h1>
+  <button id="connectBtn" onclick="toggleConnect()">Connect</button>
+  <button onclick="clearLog()">Clear Log</button>
+  <span id="status">Disconnected</span>
+</header>
+
+<div class="grid">
+
+  <!-- 0x040 GPS FD -->
+  <div class="card stale" id="card-040">
+    <div class="card-header">
+      <div><span class="card-id">0x040</span> <span class="card-name">GPS_FD</span></div>
+      <span class="card-rate" id="rate-040">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Age</span><span class="field-value" id="f040-age">--</span></div>
+    <div class="field"><span class="field-name">Error flags</span><span class="field-value" id="f040-err">--</span></div>
+    <div class="field"><span class="field-name">Latitude</span><span class="field-value" id="f040-lat">--</span></div>
+    <div class="field"><span class="field-name">Longitude</span><span class="field-value" id="f040-lon">--</span></div>
+    <div class="field"><span class="field-name">Velocity</span><span class="field-value" id="f040-vel">--</span></div>
+    <div class="field"><span class="field-name">Fix quality</span><span class="field-value" id="f040-qual">--</span></div>
+    <div class="field"><span class="field-name">Baseline</span><span class="field-value" id="f040-base">--</span></div>
+    <div class="field"><span class="field-name">Heading</span><span class="field-value" id="f040-hdg">--</span></div>
+    <div class="field"><span class="field-name">Hdg accuracy</span><span class="field-value" id="f040-hdgacc">--</span></div>
+    <div class="field"><span class="field-name">Pitch</span><span class="field-value" id="f040-pitch">--</span></div>
+    <div class="field"><span class="field-name">Pitch accuracy</span><span class="field-value" id="f040-pitchacc">--</span></div>
+    <div class="field"><span class="field-name">Satellites (RTK)</span><span class="field-value" id="f040-sats">--</span></div>
+  </div>
+
+  <!-- 0x041 GPS Position -->
+  <div class="card stale" id="card-041">
+    <div class="card-header">
+      <div><span class="card-id">0x041</span> <span class="card-name">GPS_COG_POS</span></div>
+      <span class="card-rate" id="rate-041">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Latitude</span><span class="field-value" id="f041-lat">--</span></div>
+    <div class="field"><span class="field-name">Longitude</span><span class="field-value" id="f041-lon">--</span></div>
+    <div class="field"><span class="field-name">Altitude</span><span class="field-value" id="f041-alt">--</span></div>
+    <div class="field"><span class="field-name">HDOP</span><span class="field-value" id="f041-hdop">--</span></div>
+    <div class="field"><span class="field-name">Fix valid</span><span class="field-value" id="f041-fix">--</span></div>
+    <div class="field"><span class="field-name">Fix quality</span><span class="field-value" id="f041-qual">--</span></div>
+    <div class="field"><span class="field-name">Satellites</span><span class="field-value" id="f041-sats">--</span></div>
+  </div>
+
+  <!-- 0x042 GPS Nav -->
+  <div class="card stale" id="card-042">
+    <div class="card-header">
+      <div><span class="card-id">0x042</span> <span class="card-name">GPS_COG_NAV</span></div>
+      <span class="card-rate" id="rate-042">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Velocity</span><span class="field-value" id="f042-vel">--</span></div>
+    <div class="field"><span class="field-name">Course</span><span class="field-value" id="f042-course">--</span></div>
+    <div class="field"><span class="field-name">Heading</span><span class="field-value" id="f042-hdg">--</span></div>
+    <div class="field"><span class="field-name">Hdg accuracy</span><span class="field-value" id="f042-hdgacc">--</span></div>
+    <div class="field"><span class="field-name">Heading valid</span><span class="field-value" id="f042-hdgv">--</span></div>
+    <div class="field"><span class="field-name">Baseline</span><span class="field-value" id="f042-base">--</span></div>
+    <div class="field"><span class="field-name">Pitch (RTK)</span><span class="field-value" id="f042-pitch">--</span></div>
+  </div>
+
+  <!-- 0x043 IMU FD -->
+  <div class="card stale" id="card-043">
+    <div class="card-header">
+      <div><span class="card-id">0x043</span> <span class="card-name">IMU_FD</span></div>
+      <span class="card-rate" id="rate-043">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Error flags</span><span class="field-value" id="f043-err">--</span></div>
+    <div class="field"><span class="field-name">Jitter</span><span class="field-value" id="f043-jitter">--</span></div>
+    <div class="field" style="padding-top:4px;color:#555;font-size:10px"><span>── Sample 0 ──────────────</span></div>
+    <div class="field"><span class="field-name">accel_x</span><span class="field-value" id="f043-s0-ax">--</span></div>
+    <div class="field"><span class="field-name">accel_y</span><span class="field-value" id="f043-s0-ay">--</span></div>
+    <div class="field"><span class="field-name">accel_z</span><span class="field-value" id="f043-s0-az">--</span></div>
+    <div class="field"><span class="field-name">accel_a</span><span class="field-value" id="f043-s0-aa">--</span></div>
+    <div class="field"><span class="field-name">accel_b</span><span class="field-value" id="f043-s0-ab">--</span></div>
+    <div class="field"><span class="field-name">accel_c</span><span class="field-value" id="f043-s0-ac">--</span></div>
+    <div class="field"><span class="field-name">velo_x</span><span class="field-value" id="f043-s0-vx">--</span></div>
+    <div class="field"><span class="field-name">velo_y</span><span class="field-value" id="f043-s0-vy">--</span></div>
+    <div class="field"><span class="field-name">velo_z</span><span class="field-value" id="f043-s0-vz">--</span></div>
+    <div class="field"><span class="field-name">velo_a</span><span class="field-value" id="f043-s0-va">--</span></div>
+    <div class="field"><span class="field-name">velo_b</span><span class="field-value" id="f043-s0-vb">--</span></div>
+    <div class="field"><span class="field-name">velo_c</span><span class="field-value" id="f043-s0-vc">--</span></div>
+    <div class="field" style="padding-top:4px;color:#555;font-size:10px"><span>── Sample 1 ──────────────</span></div>
+    <div class="field"><span class="field-name">accel_x</span><span class="field-value" id="f043-s1-ax">--</span></div>
+    <div class="field"><span class="field-name">accel_y</span><span class="field-value" id="f043-s1-ay">--</span></div>
+    <div class="field"><span class="field-name">accel_z</span><span class="field-value" id="f043-s1-az">--</span></div>
+    <div class="field"><span class="field-name">accel_a</span><span class="field-value" id="f043-s1-aa">--</span></div>
+    <div class="field"><span class="field-name">accel_b</span><span class="field-value" id="f043-s1-ab">--</span></div>
+    <div class="field"><span class="field-name">accel_c</span><span class="field-value" id="f043-s1-ac">--</span></div>
+    <div class="field"><span class="field-name">velo_x</span><span class="field-value" id="f043-s1-vx">--</span></div>
+    <div class="field"><span class="field-name">velo_y</span><span class="field-value" id="f043-s1-vy">--</span></div>
+    <div class="field"><span class="field-name">velo_z</span><span class="field-value" id="f043-s1-vz">--</span></div>
+    <div class="field"><span class="field-name">velo_a</span><span class="field-value" id="f043-s1-va">--</span></div>
+    <div class="field"><span class="field-name">velo_b</span><span class="field-value" id="f043-s1-vb">--</span></div>
+    <div class="field"><span class="field-name">velo_c</span><span class="field-value" id="f043-s1-vc">--</span></div>
+  </div>
+
+  <!-- 0x4F5 IMU Accel -->
+  <div class="card stale" id="card-4F5">
+    <div class="card-header">
+      <div><span class="card-id">0x4F5</span> <span class="card-name">IMU1_ACCEL</span></div>
+      <span class="card-rate" id="rate-4F5">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Accel X</span><span class="field-value" id="f4F5-ax">--</span></div>
+    <div class="field"><span class="field-name">Accel Y</span><span class="field-value" id="f4F5-ay">--</span></div>
+    <div class="field"><span class="field-name">Accel Z</span><span class="field-value" id="f4F5-az">--</span></div>
+    <div class="field"><span class="field-name">Cal done</span><span class="field-value" id="f4F5-cal">--</span></div>
+  </div>
+
+  <!-- 0x4F6 IMU Attitude -->
+  <div class="card stale" id="card-4F6">
+    <div class="card-header">
+      <div><span class="card-id">0x4F6</span> <span class="card-name">IMU1_ATT</span></div>
+      <span class="card-rate" id="rate-4F6">-- Hz</span>
+    </div>
+    <div class="field"><span class="field-name">Pitch</span><span class="field-value" id="f4F6-pitch">--</span></div>
+    <div class="field"><span class="field-name">Roll</span><span class="field-value" id="f4F6-roll">--</span></div>
+    <div class="field"><span class="field-name">Yaw</span><span class="field-value" id="f4F6-yaw">--</span></div>
+    <div class="field"><span class="field-name">Comm OK</span><span class="field-value" id="f4F6-comm">--</span></div>
+    <div class="field"><span class="field-name">Init OK</span><span class="field-value" id="f4F6-init">--</span></div>
+  </div>
+
+  <!-- Raw Log -->
+  <div class="card full-width log-section" style="margin:0; border-radius:6px;">
+    <div class="log-header">
+      <span>RAW FRAMES</span>
+      <span id="frame-count">0 frames</span>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script>
+let port = null;
+let reader = null;
+let running = false;
+let frameCount = 0;
+let buf = '';
+
+// Rate tracking
+const rateCounters = {};
+const rateTimestamps = {};
+const rateValues = {};
+
+function trackRate(id) {
+  const now = Date.now();
+  if (!rateCounters[id]) { rateCounters[id] = 0; rateTimestamps[id] = now; rateValues[id] = 0; }
+  rateCounters[id]++;
+  const elapsed = (now - rateTimestamps[id]) / 1000;
+  if (elapsed >= 1.0) {
+    rateValues[id] = (rateCounters[id] / elapsed).toFixed(1);
+    rateCounters[id] = 0;
+    rateTimestamps[id] = now;
+  }
+  const el = document.getElementById('rate-' + id);
+  if (el) el.textContent = (rateValues[id] || '0') + ' Hz';
+}
+
+// Little-endian readers
+function u32(d, o) { return (d[o] | d[o+1]<<8 | d[o+2]<<16 | d[o+3]<<24) >>> 0; }
+function s32(d, o) { return d[o] | d[o+1]<<8 | d[o+2]<<16 | d[o+3]<<24; }
+function u16(d, o) { return (d[o] | d[o+1]<<8) >>> 0; }
+function s16(d, o) { const v = d[o] | d[o+1]<<8; return v >= 0x8000 ? v - 0x10000 : v; }
+function f32(d, o) {
+  const b = new ArrayBuffer(4);
+  new Uint8Array(b).set([d[o], d[o+1], d[o+2], d[o+3]]);
+  return new DataView(b).getFloat32(0, true);
+}
+
+function set(id, val, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.className = 'field-value' + (cls ? ' ' + cls : '');
+}
+
+function badge(val, trueClass) {
+  return val ? `<span class="badge badge-${trueClass}">YES</span>` : `<span class="badge badge-gray">NO</span>`;
+}
+
+function setHtml(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+function activateCard(idStr) {
+  const card = document.getElementById('card-' + idStr);
+  if (card) { card.classList.remove('stale'); card.classList.add('active'); }
+}
+
+function decode(idStr, bytes) {
+  activateCard(idStr);
+  trackRate(idStr);
+
+  if (idStr === '040' && bytes.length >= 34) {
+    const ageUs    = u32(bytes, 0);
+    const errFlags = u16(bytes, 4);
+    const lat      = f32(bytes, 6);
+    const lon      = f32(bytes, 10);
+    const vel      = f32(bytes, 14);
+    const fixQual  = bytes[18];
+    const baseM    = u16(bytes, 19) / 100;
+    const heading  = f32(bytes, 21);
+    const hdgAcc   = u16(bytes, 25) / 100;
+    const pitch    = f32(bytes, 27);
+    const pitchAcc = u16(bytes, 31) / 100;
+    const sats     = bytes[33];
+
+    set('f040-age', (ageUs / 1000).toFixed(0) + ' ms', ageUs > 1000000 ? 'warn' : 'ok');
+    set('f040-err', '0x' + errFlags.toString(16).toUpperCase().padStart(4,'0'), errFlags ? 'err' : 'ok');
+    set('f040-lat', lat.toFixed(7) + '°', fixQual > 0 ? 'ok' : 'warn');
+    set('f040-lon', lon.toFixed(7) + '°', fixQual > 0 ? 'ok' : 'warn');
+    set('f040-vel', vel.toFixed(2) + ' m/s');
+    set('f040-qual', fixQual, fixQual >= 4 ? 'ok' : fixQual > 0 ? 'warn' : 'err');
+    set('f040-base', baseM.toFixed(2) + ' m');
+    set('f040-hdg', heading.toFixed(1) + '°');
+    set('f040-hdgacc', '±' + hdgAcc.toFixed(1) + '°', hdgAcc < 1 ? 'ok' : hdgAcc < 5 ? 'warn' : 'err');
+    set('f040-pitch', pitch.toFixed(1) + '°');
+    set('f040-pitchacc', '±' + pitchAcc.toFixed(1) + '°', pitchAcc < 1 ? 'ok' : pitchAcc < 5 ? 'warn' : 'err');
+    set('f040-sats', sats, sats > 0 ? 'ok' : 'warn');
+  }
+
+  else if (idStr === '041' && bytes.length >= 20) {
+    const lat = s32(bytes, 4) / 1e7;
+    const lon = s32(bytes, 8) / 1e7;
+    const altMm = s32(bytes, 12);
+    const hdop = u16(bytes, 16) / 100;
+    const fixValid = bytes[18];
+    const fixQual = bytes[19];
+    const sats = bytes.length > 20 ? bytes[20] : 0;
+
+    set('f041-lat', lat.toFixed(7) + '°', fixValid ? 'ok' : 'warn');
+    set('f041-lon', lon.toFixed(7) + '°', fixValid ? 'ok' : 'warn');
+    set('f041-alt', (altMm/1000).toFixed(2) + ' m');
+    set('f041-hdop', hdop.toFixed(2), hdop < 2 ? 'ok' : hdop < 5 ? 'warn' : 'err');
+    setHtml('f041-fix', badge(fixValid, 'green'));
+    set('f041-qual', fixQual);
+    set('f041-sats', sats, sats > 0 ? 'ok' : 'warn');
+  }
+
+  else if (idStr === '042' && bytes.length >= 28) {
+    const velCmps = u32(bytes, 4);
+    const courseCdeg = s32(bytes, 8);
+    const hdgCdeg = s32(bytes, 12);
+    const hdgAccCdeg = u16(bytes, 16);
+    const hdgValid = bytes[18];
+    const hdgQual = bytes[19];
+    const baseMm = u32(bytes, 20);
+    const pitchCdeg = s32(bytes, 24);
+
+    set('f042-vel', (velCmps/100).toFixed(2) + ' m/s');
+    set('f042-course', (courseCdeg/100).toFixed(1) + '°');
+    set('f042-hdg', (hdgCdeg/100).toFixed(1) + '°', hdgValid ? 'ok' : 'warn');
+    set('f042-hdgacc', '±' + (hdgAccCdeg/100).toFixed(1) + '°');
+    setHtml('f042-hdgv', badge(hdgValid, 'green'));
+    set('f042-base', (baseMm/1000).toFixed(3) + ' m');
+    set('f042-pitch', (pitchCdeg/100).toFixed(1) + '°');
+  }
+
+  else if (idStr === '043' && bytes.length >= 56) {
+    const errFlags = u16(bytes, 5);
+    const jitter   = u16(bytes, 31);
+
+    // Sample 0 (bytes 7-30)
+    const s0ax = s16(bytes, 7)  / 1000;
+    const s0ay = s16(bytes, 9)  / 1000;
+    const s0az = s16(bytes, 11) / 1000;
+    const s0aa = s16(bytes, 13) / 10;
+    const s0ab = s16(bytes, 15) / 10;
+    const s0ac = s16(bytes, 17) / 10;
+    const s0vx = s16(bytes, 19) / 100;
+    const s0vy = s16(bytes, 21) / 100;
+    const s0vz = s16(bytes, 23) / 100;
+    const s0va = s16(bytes, 25) / 100;
+    const s0vb = s16(bytes, 27) / 100;
+    const s0vc = s16(bytes, 29) / 100;
+
+    // Sample 1 (bytes 33-56)
+    const s1ax = s16(bytes, 33) / 1000;
+    const s1ay = s16(bytes, 35) / 1000;
+    const s1az = s16(bytes, 37) / 1000;
+    const s1aa = s16(bytes, 39) / 10;
+    const s1ab = s16(bytes, 41) / 10;
+    const s1ac = s16(bytes, 43) / 10;
+    const s1vx = s16(bytes, 45) / 100;
+    const s1vy = s16(bytes, 47) / 100;
+    const s1vz = s16(bytes, 49) / 100;
+    const s1va = s16(bytes, 51) / 100;
+    const s1vb = s16(bytes, 53) / 100;
+    const s1vc = s16(bytes, 55) / 100;
+
+    set('f043-err', '0x' + errFlags.toString(16).toUpperCase().padStart(4,'0'), (errFlags & 0x7) ? 'err' : 'ok');
+    set('f043-jitter', jitter + ' µs', jitter > 2000 ? 'warn' : 'ok');
+
+    set('f043-s0-ax', s0ax.toFixed(3) + ' g');
+    set('f043-s0-ay', s0ay.toFixed(3) + ' g');
+    set('f043-s0-az', s0az.toFixed(3) + ' g');
+    set('f043-s0-aa', s0aa.toFixed(1) + ' °/s²');
+    set('f043-s0-ab', s0ab.toFixed(1) + ' °/s²');
+    set('f043-s0-ac', s0ac.toFixed(1) + ' °/s²');
+    set('f043-s0-vx', s0vx.toFixed(2) + ' m/s');
+    set('f043-s0-vy', s0vy.toFixed(2) + ' m/s');
+    set('f043-s0-vz', s0vz.toFixed(2) + ' m/s');
+    set('f043-s0-va', s0va.toFixed(2) + ' °/s');
+    set('f043-s0-vb', s0vb.toFixed(2) + ' °/s');
+    set('f043-s0-vc', s0vc.toFixed(2) + ' °/s');
+
+    set('f043-s1-ax', s1ax.toFixed(3) + ' g');
+    set('f043-s1-ay', s1ay.toFixed(3) + ' g');
+    set('f043-s1-az', s1az.toFixed(3) + ' g');
+    set('f043-s1-aa', s1aa.toFixed(1) + ' °/s²');
+    set('f043-s1-ab', s1ab.toFixed(1) + ' °/s²');
+    set('f043-s1-ac', s1ac.toFixed(1) + ' °/s²');
+    set('f043-s1-vx', s1vx.toFixed(2) + ' m/s');
+    set('f043-s1-vy', s1vy.toFixed(2) + ' m/s');
+    set('f043-s1-vz', s1vz.toFixed(2) + ' m/s');
+    set('f043-s1-va', s1va.toFixed(2) + ' °/s');
+    set('f043-s1-vb', s1vb.toFixed(2) + ' °/s');
+    set('f043-s1-vc', s1vc.toFixed(2) + ' °/s');
+  }
+
+  else if (idStr === '4F5' && bytes.length >= 7) {
+    const ax = s16(bytes, 0) / 1000;
+    const ay = s16(bytes, 2) / 1000;
+    const az = s16(bytes, 4) / 1000;
+    const cal = bytes[6];
+    set('f4F5-ax', ax.toFixed(3) + ' g');
+    set('f4F5-ay', ay.toFixed(3) + ' g');
+    set('f4F5-az', az.toFixed(3) + ' g');
+    setHtml('f4F5-cal', badge(cal, 'green'));
+  }
+
+  else if (idStr === '4F6' && bytes.length >= 7) {
+    const pitch = s16(bytes, 0) / 100;
+    const roll = s16(bytes, 2) / 100;
+    const yaw = s16(bytes, 4) / 100;
+    const comm = bytes[6];
+    const init = bytes.length > 7 ? bytes[7] : 0;
+    set('f4F6-pitch', pitch.toFixed(1) + '°');
+    set('f4F6-roll', roll.toFixed(1) + '°');
+    set('f4F6-yaw', yaw.toFixed(1) + '°');
+    setHtml('f4F6-comm', badge(comm, 'green'));
+    setHtml('f4F6-init', badge(init, 'green'));
+  }
+}
+
+function parseFrame(line) {
+  line = line.trim();
+  if (!line || line[0] !== 't') return;
+
+  const idStr = line.slice(1, 4).toUpperCase();
+  let i = 4;
+  let lenStr = '';
+  while (i < line.length && line[i] >= '0' && line[i] <= '9') {
+    lenStr += line[i++];
+    if (parseInt(lenStr, 10) > 64) {
+      // overshot — last digit is start of hex data, backtrack
+      i--;
+      lenStr = lenStr.slice(0, -1);
+      break;
+    }
+  }
+  if (!lenStr) return;
+  const len = parseInt(lenStr, 10);
+  const hexData = line.slice(i);
+  if (hexData.length < len * 2) return;
+
+  const bytes = [];
+  for (let j = 0; j < len; j++) {
+    bytes.push(parseInt(hexData.slice(j*2, j*2+2), 16));
+  }
+
+  decode(idStr, bytes);
+  logFrame(idStr, len, hexData.slice(0, len*2));
+}
+
+const LOG_MAX = 100;
+function logFrame(id, len, hex) {
+  frameCount++;
+  document.getElementById('frame-count').textContent = frameCount + ' frames';
+  const log = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const preview = hex.slice(0, 32) + (hex.length > 32 ? '…' : '');
+  line.innerHTML = `<span class="lid">0x${id}</span> [${len}B] <span class="ldata">${preview}</span>`;
+  log.appendChild(line);
+  if (log.children.length > LOG_MAX) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+  frameCount = 0;
+  document.getElementById('frame-count').textContent = '0 frames';
+}
+
+async function toggleConnect() {
+  if (running) {
+    running = false;
+    if (reader) { await reader.cancel(); reader = null; }
+    if (port) { await port.close(); port = null; }
+    document.getElementById('connectBtn').textContent = 'Connect';
+    document.getElementById('connectBtn').classList.remove('active');
+    document.getElementById('status').textContent = 'Disconnected';
+    document.getElementById('status').className = '';
+    return;
+  }
+
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    running = true;
+    document.getElementById('connectBtn').textContent = 'Disconnect';
+    document.getElementById('connectBtn').classList.add('active');
+    document.getElementById('status').textContent = 'Connected';
+    document.getElementById('status').className = 'connected';
+    readLoop();
+  } catch (e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function readLoop() {
+  const decoder = new TextDecoderStream();
+  port.readable.pipeTo(decoder.writable);
+  reader = decoder.readable.getReader();
+
+  try {
+    while (running) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      const parts = buf.split('\r');
+      buf = parts.pop();
+      for (const part of parts) {
+        if (part.trim()) parseFrame(part);
+      }
+    }
+  } catch (e) {
+    if (running) document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>

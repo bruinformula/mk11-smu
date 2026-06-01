@@ -30,7 +30,7 @@ static uint8_t can_tx_data[CAN_GPS_COG_FRAME_BYTES];
 
 static uint32_t last_imu1_accel_tx_time = 0U;
 static uint32_t last_imu1_att_tx_time = 0U;
-static uint32_t last_gps_cog_timesync_tx_time = 0U;
+static uint32_t last_gps1_fd_tx_time = 0U;
 static uint32_t last_gps_cog_data_tx_time = 0U;
 
 static uint32_t last_imu_fd_tx_time = 0U;
@@ -172,67 +172,17 @@ static void CAN_PackU32LE(uint8_t *data, uint8_t idx, uint32_t value)
 	data[idx + 3U] = (uint8_t)((value >> 24) & 0xFFU);
 }
 
-static uint8_t CAN_Digit(char value)
+static void CAN_PackFloatLE(uint8_t *data, uint8_t idx, float value)
 {
-	if ((value >= '0') && (value <= '9'))
-	{
-		return (uint8_t)(value - '0');
-	}
-
-	return 0U;
+	uint32_t bits;
+	memcpy(&bits, &value, sizeof(bits));
+	CAN_PackU32LE(data, idx, bits);
 }
 
-static uint32_t CAN_ParseUtcMsOfDay(void)
+
+static uint16_t CAN_GpsErrorFlags(void)
 {
-	char utc_time[16];
-	uint32_t hours;
-	uint32_t minutes;
-	uint32_t seconds;
-	uint32_t milliseconds = 0U;
-
-	memcpy(utc_time, (const void *)gps_data.utc_time, sizeof(utc_time));
-
-	if ((utc_time[0] == '\0') || (utc_time[1] == '\0') || (utc_time[2] == '\0') || (utc_time[3] == '\0') || (utc_time[4] == '\0') || (utc_time[5] == '\0'))
-	{
-		return 0U;
-	}
-
-	hours = ((uint32_t)CAN_Digit(utc_time[0]) * 10U) + CAN_Digit(utc_time[1]);
-	minutes = ((uint32_t)CAN_Digit(utc_time[2]) * 10U) + CAN_Digit(utc_time[3]);
-	seconds = ((uint32_t)CAN_Digit(utc_time[4]) * 10U) + CAN_Digit(utc_time[5]);
-
-	if (utc_time[6] == '.')
-	{
-		milliseconds = ((uint32_t)CAN_Digit(utc_time[7]) * 100U) + ((uint32_t)CAN_Digit(utc_time[8]) * 10U) + CAN_Digit(utc_time[9]);
-	}
-
-	return (((hours * 60U) + minutes) * 60U + seconds) * 1000U + milliseconds;
-}
-
-static uint32_t CAN_ParseUtcDateYymmdd(void)
-{
-	char utc_date[16];
-	uint32_t date = 0U;
-	uint8_t idx;
-
-	memcpy(utc_date, (const void *)gps_data.utc_date, sizeof(utc_date));
-
-	for (idx = 0U; idx < 6U; idx++)
-	{
-		if ((utc_date[idx] < '0') || (utc_date[idx] > '9'))
-		{
-			return 0U;
-		}
-
-		date = (date * 10U) + CAN_Digit(utc_date[idx]);
-	}
-
-	return date;
-}
-
-static uint8_t CAN_GpsErrorFlags(void)
-{
-	uint8_t flags = 0U;
+	uint16_t flags = 0U;
 
 	if (gps_data.fix_valid == 0U)
 	{
@@ -314,26 +264,35 @@ static void CAN_SendImuAtt(void)
 	(void)CAN_Send(IMU1_ATT_TX_ID, FDCAN_DLC_BYTES_8, FDCAN_CLASSIC_CAN);
 }
 
-/*
- * Provisional 64-byte GPS COG SMU payloads. The lookup CSV defines IDs,
- * rates, and DLC 64, but the message-format CSV does not define GPS-specific
- * byte offsets yet.
- */
-static void CAN_SendGpsCogTimesync(uint32_t now_ms)
+static void CAN_SendGpsFd(uint32_t now_ms)
 {
+	uint32_t age_ms;
+	uint32_t us_since_last;
+	uint16_t length_cx100;
+	uint16_t heading_acc_cx100;
+	uint16_t pitch_acc_cx100;
+
+	age_ms = now_ms - gps_data.last_update_ms;
+	us_since_last = (age_ms <= 4294967U) ? (age_ms * 1000U) : 0xFFFFFFFFU;
+
+	length_cx100 = CAN_ClampU16(gps_data.baseline_length_m * GPS1_LENGTH_CAN_SCALE_CX100_PER_M);
+	heading_acc_cx100 = CAN_ClampU16(gps_data.heading_accuracy_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+	pitch_acc_cx100 = CAN_ClampU16(gps_data.pitch_acc_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+
 	memset(can_tx_data, 0, sizeof(can_tx_data));
-	CAN_PackU32LE(can_tx_data, 0U, now_ms * 1000U);
-	CAN_PackU32LE(can_tx_data, 4U, CAN_ParseUtcMsOfDay());
-	CAN_PackU32LE(can_tx_data, 8U, CAN_ParseUtcDateYymmdd());
-	can_tx_data[12] = gps_data.fix_valid;
-	can_tx_data[13] = gps_data.fix_quality;
-	can_tx_data[14] = gps_data.satellites;
-	can_tx_data[15] = gps_data.heading_valid;
-	CAN_PackU32LE(can_tx_data, 16U, gps_diag.sentence_count);
-	CAN_PackU32LE(can_tx_data, 20U, gps_diag.rmc_count);
-	CAN_PackU32LE(can_tx_data, 24U, gps_diag.gga_count);
-	CAN_PackU32LE(can_tx_data, 28U, gps_diag.pqtmtar_count);
-	can_tx_data[63] = CAN_GpsErrorFlags();
+	CAN_PackU32LE(can_tx_data, 0U, us_since_last);                    /* bytes 0-3  */
+	CAN_PackU16LE(can_tx_data, 4U, CAN_GpsErrorFlags());              /* bytes 4-5  */
+	CAN_PackFloatLE(can_tx_data, 6U, gps_data.latitude_deg);          /* bytes 6-9  */
+	CAN_PackFloatLE(can_tx_data, 10U, gps_data.longitude_deg);        /* bytes 10-13 */
+	CAN_PackFloatLE(can_tx_data, 14U, gps1_velocity_mps);             /* bytes 14-17 */
+	can_tx_data[18] = gps_data.fix_quality;                           /* byte 18    */
+	CAN_PackU16LE(can_tx_data, 19U, length_cx100);                    /* bytes 19-20 */
+	CAN_PackFloatLE(can_tx_data, 21U, gps_data.heading_deg);          /* bytes 21-24 */
+	CAN_PackU16LE(can_tx_data, 25U, heading_acc_cx100);               /* bytes 25-26 */
+	CAN_PackFloatLE(can_tx_data, 27U, gps_data.pitch_deg);            /* bytes 27-30 */
+	CAN_PackU16LE(can_tx_data, 31U, pitch_acc_cx100);                 /* bytes 31-32 */
+	can_tx_data[33] = gps_data.tar_satellites;                        /* byte 33    */
+	/* bytes 34-63 reserved, zeroed */
 
 	(void)CAN_Send(GPS_COG_TIMESYNC_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);
 }
@@ -853,7 +812,7 @@ HAL_StatusTypeDef CAN_Init(FDCAN_HandleTypeDef *fdcan)
 
 	last_imu1_accel_tx_time = 0U;
 	last_imu1_att_tx_time = 0U;
-	last_gps_cog_timesync_tx_time = 0U;
+	last_gps1_fd_tx_time = 0U;
 	last_gps_cog_data_tx_time = 0U;
 
 	last_imu_fd_tx_time = 0U;
@@ -897,10 +856,10 @@ void CAN_Process(uint32_t now_ms)
 #ifdef SMU_GPS_IMU_CROSS
 	if (SMU_BOARD_ID == 0U)
 	{
-		if ((now_ms - last_gps_cog_timesync_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS)
+		if ((now_ms - last_gps1_fd_tx_time) >= GPS_COG_TIMESYNC_TX_INTERVAL_MS)
 		{
-			last_gps_cog_timesync_tx_time = now_ms;
-			CAN_SendGpsCogTimesync(now_ms);
+			last_gps1_fd_tx_time = now_ms;
+			CAN_SendGpsFd(now_ms);
 		}
 
 		if ((now_ms - last_gps_cog_data_tx_time) >= GPS_COG_DATA_TX_INTERVAL_MS)
