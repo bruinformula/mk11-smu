@@ -63,17 +63,25 @@ void Error_Handler(void);
 #define VCP_RX_GPIO_Port GPIOA
 #define IMU_CS_Pin GPIO_PIN_4
 #define IMU_CS_GPIO_Port GPIOA
-#define ROVER_RST_Pin GPIO_PIN_1
-#define ROVER_RST_GPIO_Port GPIOB
-#define BASE_RST_Pin GPIO_PIN_11
-#define BASE_RST_GPIO_Port GPIOA
-#define BASE_1PPS_Pin GPIO_PIN_12
-#define BASE_1PPS_GPIO_Port GPIOA
+#define GPS1_RST_Pin GPIO_PIN_1
+#define GPS1_RST_GPIO_Port GPIOB
+#define GPS1_PPS_Pin GPIO_PIN_2
+#define GPS1_PPS_GPIO_Port GPIOB
+#define GPS_RTK_Pin GPIO_PIN_10
+#define GPS_RTK_GPIO_Port GPIOB
+#define GPS_Standard_Pin GPIO_PIN_11
+#define GPS_Standard_GPIO_Port GPIOB
+#define GPS_Error_Pin GPIO_PIN_12
+#define GPS_Error_GPIO_Port GPIOB
+#define GPS2_PPS_Pin GPIO_PIN_12
+#define GPS2_PPS_GPIO_Port GPIOA
+#define GPS2_WKUP_Pin GPIO_PIN_15
+#define GPS2_WKUP_GPIO_Port GPIOA
+#define GPS1_WKUP_Pin GPIO_PIN_5
+#define GPS1_WKUP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-/* Comment out for IMU-only (non-cross) mode: UART1/UART3 are ignored and
- * only IMU CAN frames (0x4F5 / 0x4F6) are transmitted. */
-#define SMU_GPS_IMU_CROSS
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

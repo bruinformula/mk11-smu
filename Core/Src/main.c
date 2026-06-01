@@ -35,11 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* #define GPS1_RST_DEBUG_HOLD */
-/* #define ROVER_BAUD_PROGRAM */
-#define ROVER_GPS_UART_HANDLE (&huart1)
-#define ROVER_FACTORY_BAUD  921600U
-//#define ROVER_TARGET_BAUD   460800U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,16 +46,17 @@
 /* Private variables ---------------------------------------------------------*/
 FDCAN_HandleTypeDef hfdcan1;
 
+I2C_HandleTypeDef hi2c2;
+
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_rx;
 DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
-UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart1_tx;
+DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
-DMA_HandleTypeDef hdma_usart3_rx;
-DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 /* USEFUL LIVE EXPRESSIONS TO PROBE:
@@ -101,14 +98,10 @@ volatile int16_t imu_ay_raw = 0;
 volatile int16_t imu_az_raw = 0;
 
 volatile uint8_t gps_init_ok = 0U;
-volatile uint8_t gps_rx_start_ok = 0U;
 volatile uint8_t pps_init_ok = 0U;
 volatile uint8_t state_init_ok = 0U;
 volatile uint8_t can_init_ok = 0U;
-volatile uint8_t gps_mode_pin_state = 0U;
 volatile uint32_t gps_uart_error_count = 0U;
-volatile uint32_t gps_uart_abort_count = 0U;
-volatile uint32_t gps_uart_irq_count = 0U;
 
 uint32_t last_imu_poll_time = 0U;
 /* USER CODE END PV */
@@ -120,9 +113,9 @@ static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_FDCAN1_Init(void);
-static void MX_USART3_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -142,16 +135,9 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	if ((huart != NULL) && (huart->Instance == ROVER_GPS_UART_HANDLE->Instance)) {
+	if ((huart != NULL) && (huart->Instance == huart1.Instance)) {
 		gps_uart_error_count++;
-		gps_diag.uart_last_error_code = huart->ErrorCode;
-		(void) GPS_StartReceiveIT();
-	}
-}
-
-void HAL_UART_AbortCpltCallback(UART_HandleTypeDef *huart) {
-	if ((huart != NULL) && (huart->Instance == ROVER_GPS_UART_HANDLE->Instance)) {
-		gps_uart_abort_count++;
+		GPS_ErrorRestart();
 	}
 }
 /* USER CODE END 0 */
@@ -189,272 +175,86 @@ int main(void)
   MX_SPI1_Init();
   MX_ICACHE_Init();
   MX_FDCAN1_Init();
-  MX_USART3_UART_Init();
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
-#ifdef ROVER_BAUD_PROGRAM
-	/* Step 1: All peripherals initialised above.
-     Step 2: BASE_RST is LOW (held in reset by GPIO init).
-             ROVER_RST is HIGH (rover running at factory 460800).
-     Allow rover to settle before sending commands. */
-	HAL_Delay(500U);
+	PPS_ForcePinConfig();
 
-	/* Step 3: Program rover UART baud and enable NMEA messages */
+	if (IMU_Init(&hspi1) == HAL_OK) {
+		imu_init_ok = 1U;
+	} else {
+		imu_init_ok = 0U;
+	}
 
+	if (GPS_Init(&huart1) == HAL_OK) {
+		gps_init_ok = 1U;
+	} else {
+		gps_init_ok = 0U;
+	}
 
-//	static const char rover_baud_cmd[] = "$PQTMCFGUART,W,460800*13\r\n";
+	if (PPS_Init() == HAL_OK) {
+		pps_init_ok = 1U;
+	} else {
+		pps_init_ok = 0U;
+	}
 
-//	    static const char rover_baud_cmd[] = "$PAIR864,0,0,460800*16\r\n";
-	    static const char rover_baud_cmd[] = "$PAIR864,0,0,921600*10\r\n";
-	static const char rover_gga_cmd[]  = "$PAIR062,0,1*3F\r\n";
-	static const char rover_rmc_cmd[]  = "$PAIR062,4,1*3B\r\n";
+	if (State_Init() == HAL_OK) {
+		state_init_ok = 1U;
+	} else {
+		state_init_ok = 0U;
+	}
 
-	static const char rover_gga_dis_cmd[]  = "$PAIR062,0,0*3E\r\n";
-	static const char rover_rmc_dis_cmd[]  = "$PAIR062,4,0*3A\r\n";
-	static const char rover_save_cmd[] = "$PQTMSAVEPAR*5A\r\n";
-	static const char restore_cmd[] = "$PQTMRESTOREPAR*13\r\n";
-	static const char bs1[] = "$PAIR514*3A\r\n";
-	static const char bs2[] = "$PAIR513*3D\r\n";
-	static const char bs3[] = "$PAIR865,0,0*31\r\n";
-//	static const char en_rmc_cmd[] = "$PQTMCFGMSGRATE,W,RMC,1*17\r\n";
-//	static const char en_gga_cmd[] = "$PQTMCFGMSGRATE,W,GGA,1*0A\r\n";
-
-	static const char en_vtg_cmd[] = "$PAIR062,5,1*3F\r\n";
-	static const char en_rmc_cmd[] = "$PAIR062,4,1*3E\r\n";
-	static const char en_gga_cmd[] = "$PAIR062,0,1*3F\r\n";
-
-//	static const char bs4[] = ""
-
-	uint32_t i;
-
-//	HAL_UART_Transmit(&huart1, (uint8_t *)restore_cmd,
-//			(uint16_t)(sizeof(restore_cmd) - 1U), 100U);
-//	HAL_Delay(1000U);
-//	HAL_UART_Transmit(&huart1, (uint8_t *)rover_save_cmd,
-//			(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//	HAL_Delay(1000U);
-//	HAL_UART_Transmit(&huart1, (uint8_t *)bs1,
-//			(uint16_t)(sizeof(bs1) - 1U), 100U);
-//	HAL_Delay(1000U);
-//	HAL_UART_Transmit(&huart1, (uint8_t *)bs2,
-//			(uint16_t)(sizeof(bs2) - 1U), 100U);
-//	HAL_Delay(1000U);
-	HAL_UART_Transmit(&huart3, (uint8_t *)restore_cmd,
-			(uint16_t)(sizeof(restore_cmd) - 1U), 100U);
-	HAL_Delay(1000U);
-	HAL_UART_Transmit(&huart3, (uint8_t *)rover_save_cmd,
-			(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-	HAL_Delay(1000U);
-	HAL_UART_Transmit(&huart3, (uint8_t *)bs1,
-			(uint16_t)(sizeof(bs1) - 1U), 100U);
-	HAL_Delay(1000U);
-	HAL_UART_Transmit(&huart3, (uint8_t *)bs2,
-			(uint16_t)(sizeof(bs2) - 1U), 100U);
-	HAL_Delay(1000U);
-	HAL_UART_Transmit(&huart3, (uint8_t *)bs3,
-			(uint16_t)(sizeof(bs3) - 1U), 100U);
-	HAL_Delay(1000U);
-
-	/* 3a: Send baud-change command at factory baud (460800) */
-//	huart3.Init.BaudRate = 460800U;
-//				(void)HAL_UART_Init(&huart3);
-//			for (i = 0U; i < 5U; i++)
-//			{
-//				HAL_UART_Transmit(&huart3, (uint8_t *)rover_baud_cmd,
-//						(uint16_t)(sizeof(rover_baud_cmd) - 1U), 100U);
-//				HAL_Delay(1000U);
-//			}
-//			huart3.Init.BaudRate = 921600U;
-//			HAL_UART_Transmit(&huart3, (uint8_t *)en_gga_cmd,
-//									(uint16_t)(sizeof(en_gga_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//			HAL_UART_Transmit(&huart3, (uint8_t *)en_rmc_cmd,
-//									(uint16_t)(sizeof(en_rmc_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//			HAL_UART_Transmit(&huart3, (uint8_t *)en_vtg_cmd,
-//					(uint16_t)(sizeof(en_vtg_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//
-//			HAL_UART_Transmit(&huart3, (uint8_t *)rover_save_cmd,
-//					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//			HAL_UART_Transmit(&huart3, (uint8_t *)rover_save_cmd,
-//					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-//
-//			HAL_UART_Transmit(&huart3, (uint8_t *)rover_save_cmd,
-//					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-
-
-
-//
-//			/* 3a: Send baud-change command at factory baud (460800) */
-//			for (i = 0U; i < 5U; i++)
-//			{
-//				HAL_UART_Transmit(&huart1, (uint8_t *)rover_baud_cmd,
-//						(uint16_t)(sizeof(rover_baud_cmd) - 1U), 100U);
-//				HAL_Delay(1000U);
-//			}
-//
-//			HAL_UART_Transmit(&huart1, (uint8_t *)rover_save_cmd,
-//					(uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-//			HAL_Delay(1000U);
-
-
-
-			/* 3b: Switch MCU USART1 to match rover's new baud */
-			//    huart1.Init.BaudRate = 460800U;
-			//    (void)HAL_UART_Init(&huart1);
-
-			/* 3c: Enable GGA and RMC at target baud */
-			//    HAL_UART_Transmit(&huart1, (uint8_t *)rover_gga_cmd,
-			//                      (uint16_t)(sizeof(rover_gga_cmd) - 1U), 100U);
-			//    HAL_Delay(200U);
-			//    HAL_UART_Transmit(&huart1, (uint8_t *)rover_rmc_cmd,
-			//                      (uint16_t)(sizeof(rover_rmc_cmd) - 1U), 100U);
-			//    HAL_Delay(200U);
-
-			//    HAL_UART_Transmit(&huart1, (uint8_t *)rover_gga_dis_cmd,
-			//                          (uint16_t)(sizeof(rover_gga_dis_cmd) - 1U), 100U);
-			//        HAL_Delay(200U);
-			//        HAL_UART_Transmit(&huart1, (uint8_t *)rover_rmc_dis_cmd,
-			//                          (uint16_t)(sizeof(rover_rmc_dis_cmd) - 1U), 100U);
-			//        HAL_Delay(200U);
-			//
-			//    /* 3d: Save all settings (baud + message rates) */
-			//    for (i = 0U; i < 5U; i++)
-			//    {
-			//      HAL_UART_Transmit(&huart1, (uint8_t *)rover_save_cmd,
-			//                        (uint16_t)(sizeof(rover_save_cmd) - 1U), 100U);
-			//      HAL_Delay(1000U);
-			//    }
-			//  }
-
-
-
-			//        while(1){}
-			//        HAL_UART_Transmit(&huart3, (uint8_t *)restore_cmd,
-			//                                  (uint16_t)(sizeof(restore_cmd) - 1U), 100U);
-			//        HAL_Delay(1000U);
-
-			/* Step 4: Pull ROVER reset LOW */
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_RESET);
-			HAL_Delay(150U);
-
-			/* Step 5: Release BASE and ROVER reset simultaneously */
-			HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
-
-			/* G for both modules to complete boot */
-			HAL_Delay(5000U);
-
-#else /* !ROVER_BAUD_PROGRAM */
-			/* Rover already at 921600 — just release both resets */
-			HAL_GPIO_WritePin(BASE_RST_GPIO_Port, BASE_RST_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
-			HAL_Delay(5000U);
-#endif /* ROVER_BAUD_PROGRAM */
-
-			gps_mode_pin_state = (uint8_t)HAL_GPIO_ReadPin(BASE_RST_GPIO_Port, BASE_RST_Pin);
-
-			PPS_ForcePinConfig();
-
-			if (IMU_Init(&hspi1) == HAL_OK) {
-				imu_init_ok = 1U;
-			} else {
-				imu_init_ok = 0U;
-			}
-
-#ifdef SMU_GPS_IMU_CROSS
-			if (SMU_BOARD_ID == 0U && GPS_Init(ROVER_GPS_UART_HANDLE) == HAL_OK) {
-				gps_init_ok = 1U;
-			} else {
-				gps_init_ok = 0U;
-			}
-
-//			if (SMU_BOARD_ID == 0U && GPS_StartReceiveIT() == HAL_OK) {
-//				gps_rx_start_ok = 1U;
-//			} else {
-//				gps_rx_start_ok = 0U;
-//			}
-
-			if (SMU_BOARD_ID == 0U && PPS_Init() == HAL_OK) {
-				pps_init_ok = 1U;
-			} else {
-				pps_init_ok = 0U;
-			}
-#endif /* SMU_GPS_IMU_CROSS */
-
-			if (State_Init() == HAL_OK) {
-				state_init_ok = 1U;
-			} else {
-				state_init_ok = 0U;
-			}
-
-			if (CAN_Init(&hfdcan1) == HAL_OK) {
-				can_init_ok = 1U;
-			} else {
-				can_init_ok = 0U;
-			}
-
-			//	HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
-			//	gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(ROVER_RST_GPIO_Port,
-			//			ROVER_RST_Pin);
+	if (CAN_Init(&hfdcan1) == HAL_OK) {
+		can_init_ok = 1U;
+	} else {
+		can_init_ok = 0U;
+	}
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-			while (1) {
-				uint32_t now = HAL_GetTick();
+	while (1) {
+		uint32_t now = HAL_GetTick();
 
-				gps_mode_pin_state = (uint8_t) HAL_GPIO_ReadPin(BASE_RST_GPIO_Port,
-						BASE_RST_Pin);
+		PPS_Process(now);
+		GPS_Process();
 
-#ifdef SMU_GPS_IMU_CROSS
-				if (SMU_BOARD_ID == 0U) {
-					PPS_Process(now); // PPS needs to be polled immediately after getting 'now' before GPS handling, otherwise PPS read does not update
-					GPS_Process();
-				}
-#endif /* SMU_GPS_IMU_CROSS */
+		if ((now - last_imu_poll_time) >= 10U) {
+			last_imu_poll_time = now;
 
-				if ((now - last_imu_poll_time) >= 10U) {
-					last_imu_poll_time = now;
+			/* WHO_AM_I uses blocking SPI; only run when DMA bus is idle */
+			if (!IMU_IsBusy()) {
+				imu_last_status = (uint8_t) IMU_CheckWhoAmI((uint8_t*) &imu_whoami);
+				imu_comm_ok = ((imu_last_status == HAL_OK)
+						&& (imu_whoami == IMU_WHO_AM_I_VALUE)) ? 1U : 0U;
+			}
 
-					/* WHO_AM_I uses blocking SPI; only run when DMA bus is idle */
-					if (!IMU_IsBusy()) {
-						imu_last_status = (uint8_t) IMU_CheckWhoAmI((uint8_t*) &imu_whoami);
-						imu_comm_ok =
-								((imu_last_status == HAL_OK)
-										&& (imu_whoami == IMU_WHO_AM_I_VALUE)) ? 1U : 0U;
-					}
-
-					if (imu_comm_ok && imu_init_ok) {
-						/* consume any completed DMA read */
-						if (IMU_PollReadAxes((int16_t*) &imu_gx_raw, (int16_t*) &imu_gy_raw,
-								(int16_t*) &imu_gz_raw, (int16_t*) &imu_ax_raw,
-								(int16_t*) &imu_ay_raw, (int16_t*) &imu_az_raw)) {
-							State_UpdateFromImuRaw(imu_gx_raw, imu_gy_raw, imu_gz_raw,
-									imu_ax_raw, imu_ay_raw, imu_az_raw, now);
-						}
-
-						/* kick off the next read for the following tick */
-						if (IMU_StartReadAxes() != HAL_OK) {
-							imu_last_status = 0xFFU;
-						}
-					}
-
-					imu_poll_count++;
+			if (imu_comm_ok && imu_init_ok) {
+				/* consume any completed DMA read */
+				if (IMU_PollReadAxes((int16_t*) &imu_gx_raw, (int16_t*) &imu_gy_raw,
+						(int16_t*) &imu_gz_raw, (int16_t*) &imu_ax_raw,
+						(int16_t*) &imu_ay_raw, (int16_t*) &imu_az_raw)) {
+					State_UpdateFromImuRaw(imu_gx_raw, imu_gy_raw, imu_gz_raw,
+							imu_ax_raw, imu_ay_raw, imu_az_raw, now);
 				}
 
-				CAN_SetImuStatus(imu_comm_ok, imu_init_ok);
-				CAN_Process(now);
+				/* kick off the next read for the following tick */
+				if (IMU_StartReadAxes() != HAL_OK) {
+					imu_last_status = 0xFFU;
+				}
+			}
+
+			imu_poll_count++;
+		}
+
+		CAN_SetImuStatus(imu_comm_ok, imu_init_ok);
+		CAN_Process(now);
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-			}
+	}
   /* USER CODE END 3 */
 }
 
@@ -550,6 +350,54 @@ static void MX_FDCAN1_Init(void)
 }
 
 /**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.Timing = 0x60514452;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
   * @brief ICACHE Initialization Function
   * @param None
   * @retval None
@@ -633,7 +481,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 921600;
+  huart1.Init.BaudRate = 460800;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -714,54 +562,6 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
-  * @brief USART3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART3_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART3_Init 0 */
-
-  /* USER CODE END USART3_Init 0 */
-
-  /* USER CODE BEGIN USART3_Init 1 */
-
-  /* USER CODE END USART3_Init 1 */
-  huart3.Instance = USART3;
-  huart3.Init.BaudRate = 921600;
-  huart3.Init.WordLength = UART_WORDLENGTH_8B;
-  huart3.Init.StopBits = UART_STOPBITS_1;
-  huart3.Init.Parity = UART_PARITY_NONE;
-  huart3.Init.Mode = UART_MODE_TX_RX;
-  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart3.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_SetTxFifoThreshold(&huart3, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_SetRxFifoThreshold(&huart3, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_DisableFifoMode(&huart3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART3_Init 2 */
-
-  /* USER CODE END USART3_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -808,37 +608,46 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|BASE_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, IMU_CS_Pin|GPS2_WKUP_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ROVER_RST_GPIO_Port, ROVER_RST_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPS1_RST_GPIO_Port, GPS1_RST_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin : IMU_CS_Pin */
-  GPIO_InitStruct.Pin = IMU_CS_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPS_RTK_Pin|GPS_Standard_Pin|GPS_Error_Pin|GPS1_WKUP_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : IMU_CS_Pin GPS2_WKUP_Pin */
+  GPIO_InitStruct.Pin = IMU_CS_Pin|GPS2_WKUP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(IMU_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : ROVER_RST_Pin */
-  GPIO_InitStruct.Pin = ROVER_RST_Pin;
+  /*Configure GPIO pin : GPS1_RST_Pin */
+  GPIO_InitStruct.Pin = GPS1_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(ROVER_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPS1_RST_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BASE_RST_Pin */
-  GPIO_InitStruct.Pin = BASE_RST_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  /*Configure GPIO pin : GPS1_PPS_Pin */
+  GPIO_InitStruct.Pin = GPS1_PPS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPS1_PPS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : GPS_RTK_Pin GPS_Standard_Pin GPS_Error_Pin GPS1_WKUP_Pin */
+  GPIO_InitStruct.Pin = GPS_RTK_Pin|GPS_Standard_Pin|GPS_Error_Pin|GPS1_WKUP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(BASE_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BASE_1PPS_Pin */
-  GPIO_InitStruct.Pin = BASE_1PPS_Pin;
+  /*Configure GPIO pin : GPS2_PPS_Pin */
+  GPIO_InitStruct.Pin = GPS2_PPS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(BASE_1PPS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPS2_PPS_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
