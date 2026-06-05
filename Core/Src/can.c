@@ -410,6 +410,9 @@ static void CAN_DumpStatus(uint32_t now_ms)
 	uint32_t tx_pend;
 	char line[160];
 	int n;
+	static uint8_t can_network_detected = 0U;
+	static uint32_t last_tx_count = 0U;
+	static uint32_t tx_stuck_seconds = 0U;
 
 	if (can_fdcan == NULL)
 	{
@@ -418,6 +421,12 @@ static void CAN_DumpStatus(uint32_t now_ms)
 
 	(void)HAL_FDCAN_GetProtocolStatus(can_fdcan, &psr);
 	(void)HAL_FDCAN_GetErrorCounters(can_fdcan, &ec);
+
+	/* Arm the watchdog only after we successfully receive at least one packet. */
+	if (!can_network_detected && fdcan_rx_count > 0U)
+	{
+		can_network_detected = 1U;
+	}
 
 	tx_fl = HAL_FDCAN_GetTxFifoFreeLevel(can_fdcan);
 	tx_pend = can_fdcan->Instance->TXFQS & 0x3FU;
@@ -442,6 +451,31 @@ static void CAN_DumpStatus(uint32_t now_ms)
 	if (n > 0)
 	{
 		GPS_DebugMirror((const uint8_t *)line, (uint16_t)n);
+	}
+
+	/* Watchdog Check: reset if we are actively trying to transmit but
+	 * fdcan_tx_count has not increased for 5 seconds after network arming. */
+	if (can_network_detected)
+	{
+		if (fdcan_tx_count == last_tx_count)
+		{
+			tx_stuck_seconds++;
+			if (tx_stuck_seconds >= 5U)
+			{
+				printf("CAN Watchdog: CAN transmission stuck for 5s. Resetting system...\r\n");
+				HAL_Delay(100); /* let print complete */
+				NVIC_SystemReset();
+			}
+		}
+		else
+		{
+			tx_stuck_seconds = 0U;
+			last_tx_count = fdcan_tx_count;
+		}
+	}
+	else
+	{
+		last_tx_count = fdcan_tx_count;
 	}
 
 	/* Auto-recover from bus-off: HAL clears INIT once recovery sequence completes,
