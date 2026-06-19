@@ -206,21 +206,24 @@ static void handle_sentence(const char *s)
     int  n;
 
     gps_diag.sentences++;
+    gps_diag.sentence_count++;
 
     n = snprintf(dbg, sizeof(dbg), "GPS>%s\r\n", s);
     if (n > 0) {
         dbg_push((const uint8_t *)dbg, (uint16_t)n);
     }
 
-    if ((strncmp(s, "$GNRMC", 6) == 0) || (strncmp(s, "$GPRMC", 6) == 0)) {
-        snprintf(buf, sizeof(buf), "%s", s);
-        parse_rmc(buf);
-    } else if ((strncmp(s, "$GNGGA", 6) == 0) || (strncmp(s, "$GPGGA", 6) == 0)) {
-        snprintf(buf, sizeof(buf), "%s", s);
-        parse_gga(buf);
-    } else if ((strncmp(s, "$GNVTG", 6) == 0) || (strncmp(s, "$GPVTG", 6) == 0)) {
-        snprintf(buf, sizeof(buf), "%s", s);
-        parse_vtg(buf);
+    if (s[0] == '$' && strlen(s) >= 6) {
+        if (strncmp(s + 3, "RMC", 3) == 0) {
+            snprintf(buf, sizeof(buf), "%s", s);
+            parse_rmc(buf);
+        } else if (strncmp(s + 3, "GGA", 3) == 0) {
+            snprintf(buf, sizeof(buf), "%s", s);
+            parse_gga(buf);
+        } else if (strncmp(s + 3, "VTG", 3) == 0) {
+            snprintf(buf, sizeof(buf), "%s", s);
+            parse_vtg(buf);
+        }
     }
 }
 
