@@ -590,18 +590,20 @@ static void CAN_SendGpsCogNav(uint32_t now_ms)
 	uint16_t heading_accuracy_cdeg;
 	uint32_t baseline_mm;
 	int32_t pitch_cdeg;
+	int32_t body_slip_cdeg;
 
 	vel_cmps = CAN_ClampU32(
 		(gps_data.speed_kph / 3.6f) * GPS1_VEL_CAN_SCALE_CMPS_PER_MPS);
 	course_cdeg = CAN_ClampS32(
 		gps_data.course_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	heading_cdeg = CAN_ClampS32(
-		gps_data.course_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+		gps1_heading_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	heading_accuracy_cdeg = CAN_ClampU16(
 		gps_data.heading_accuracy_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 	baseline_mm = CAN_ClampU32(
 		gps_data.baseline_length_m * GPS1_BASELINE_CAN_SCALE_MM_PER_M);
 	pitch_cdeg = CAN_ClampS32(gps_data.pitch_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
+	body_slip_cdeg = CAN_ClampS32(body_slip_angle_deg * GPS1_HEADING_CAN_SCALE_CDEG_PER_DEG);
 
 	memset(can_tx_data, 0, sizeof(can_tx_data));
 	CAN_PackU32LE(can_tx_data, 0U, now_ms * 1000U);
@@ -613,6 +615,7 @@ static void CAN_SendGpsCogNav(uint32_t now_ms)
 	can_tx_data[19] = gps_data.heading_quality;
 	CAN_PackU32LE(can_tx_data, 20U, baseline_mm);
 	CAN_PackS32LE(can_tx_data, 24U, pitch_cdeg);
+	CAN_PackS32LE(can_tx_data, 28U, body_slip_cdeg);
 	can_tx_data[63] = CAN_GpsErrorFlags();
 
 	(void)CAN_Send(GPS_COG_NAV_TX_ID, FDCAN_DLC_BYTES_64, FDCAN_FD_CAN);

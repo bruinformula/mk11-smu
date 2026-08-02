@@ -51,6 +51,8 @@ extern volatile float imu_grav_ref_x;
 extern volatile float imu_grav_ref_y;
 extern volatile float imu_grav_ref_z;
 
+extern volatile float body_slip_angle_deg;
+
 HAL_StatusTypeDef State_Init(void);
 void State_UpdateFromImuRaw(int16_t gx_raw,
                             int16_t gy_raw,

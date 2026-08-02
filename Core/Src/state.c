@@ -1,5 +1,6 @@
 #include "state.h"
 #include "gps.h"
+#include "can.h"
 
 #include <math.h>
 
@@ -49,6 +50,8 @@ volatile float imu1_yaw_deg = 0.0f;
 volatile float imu_grav_ref_x = 0.0f;
 volatile float imu_grav_ref_y = 0.0f;
 volatile float imu_grav_ref_z = 1.0f;
+
+volatile float body_slip_angle_deg = 0.0f;
 
 static float imu_cal_R[3][3] = {
 	{1.0f, 0.0f, 0.0f},
@@ -267,7 +270,18 @@ static void State_UpdateGpsNav(float dt_s)
 	{
 		gps1_heading_deg = WrapAngleDeg(imu1_yaw_deg);
 	}
+
+	if ((gps_data.fix_valid == 1U) && (gps1_velocity_mps >= GPS1_HEADING_MIN_SPEED_MPS))
+	{
+		// Calculate difference between vehicle heading (IMU) and the Vehicle course
+		body_slip_angle_deg = AngleDiffDeg(imu1_yaw_deg, gps_data.course_deg);
+	}
+	else
+	{
+		body_slip_angle_deg = 0.0f;
+	}
 }
+
 
 HAL_StatusTypeDef State_Init(void)
 {
@@ -309,6 +323,8 @@ HAL_StatusTypeDef State_Init(void)
 	imu_grav_ref_x = 0.0f;
 	imu_grav_ref_y = 0.0f;
 	imu_grav_ref_z = 1.0f;
+
+	body_slip_angle_deg = 0.0f;
 
 	imu_cal_R[0][0] = 1.0f;
 	imu_cal_R[0][1] = 0.0f;
