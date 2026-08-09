@@ -214,15 +214,21 @@ static void handle_sentence(const char *s)
     }
 
     if (s[0] == '$' && strlen(s) >= 6) {
-        if (strncmp(s + 3, "RMC", 3) == 0) {
-            snprintf(buf, sizeof(buf), "%s", s);
-            parse_rmc(buf);
-        } else if (strncmp(s + 3, "GGA", 3) == 0) {
-            snprintf(buf, sizeof(buf), "%s", s);
-            parse_gga(buf);
-        } else if (strncmp(s + 3, "VTG", 3) == 0) {
-            snprintf(buf, sizeof(buf), "%s", s);
-            parse_vtg(buf);
+        /* Only parse combined GNSS ($GN) or GPS ($GP) talkers to prevent
+         * individual constellation outputs (e.g. GLONASS $GL, Galileo $GA, BeiDou $GB)
+         * from overwriting valid multi-constellation solutions in gps_data.
+         */
+        if (strncmp(s + 1, "GN", 2) == 0 || strncmp(s + 1, "GP", 2) == 0) {
+            if (strncmp(s + 3, "RMC", 3) == 0) {
+                snprintf(buf, sizeof(buf), "%s", s);
+                parse_rmc(buf);
+            } else if (strncmp(s + 3, "GGA", 3) == 0) {
+                snprintf(buf, sizeof(buf), "%s", s);
+                parse_gga(buf);
+            } else if (strncmp(s + 3, "VTG", 3) == 0) {
+                snprintf(buf, sizeof(buf), "%s", s);
+                parse_vtg(buf);
+            }
         }
     }
 }
